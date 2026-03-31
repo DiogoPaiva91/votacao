@@ -17,12 +17,16 @@ import {
   updateProjectStatus,
   addProjectMember,
   clearProjectVotes,
+  finalizeProject,
+  forceCloseVoting,
+  getTiebreakerRounds,
   type Project,
   type ProjectMember,
   type VotingItem,
   type VotingOption,
   type Vote,
   type Document,
+  type TiebreakerRound,
 } from "@/lib/supabase";
 import {
   Check,
@@ -48,7 +52,7 @@ function StatusBadge({ status }: { status: Project["status"] }) {
     draft: { label: "Rascunho", bg: "rgba(255,255,255,0.15)", color: "#fff", border: "rgba(255,255,255,0.3)" },
     voting: { label: "Em Votação", bg: "rgba(246,146,30,0.25)", color: "#fbbf24", border: "rgba(246,146,30,0.5)" },
     finalized: { label: "Finalizado", bg: "rgba(0,198,76,0.25)", color: "#4ade80", border: "rgba(0,198,76,0.5)" },
-    archived: { label: "Arquivado", bg: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)", border: "rgba(255,255,255,0.2)" },
+    archived: { label: "Desempate", bg: "rgba(246,146,30,0.25)", color: "#fbbf24", border: "rgba(246,146,30,0.5)" },
   };
   const s = map[status] ?? map.draft;
   return (
@@ -332,7 +336,7 @@ export default function ProjectVotingPage() {
   // ── Handlers ──
   const handleSelect = useCallback(
     async (itemId: string, optionId: string) => {
-      if (!supabase || hasFinalized) return;
+      if (!supabase || (hasFinalized && project?.status !== "archived")) return;
       setSelections((prev) => ({ ...prev, [itemId]: optionId }));
       setSubmitting(true);
       try {
@@ -352,32 +356,56 @@ export default function ProjectVotingPage() {
         setSubmitting(false);
       }
     },
-    [supabase, hasFinalized, projectId, voterEmail, voterName, voterAvatar],
+    [supabase, hasFinalized, project, projectId, voterEmail, voterName, voterAvatar],
   );
 
   const handleFinalize = useCallback(async () => {
-    if (!supabase || hasFinalized) return;
+    if (!supabase || hasFinalized || !project) return;
     setFinalizing(true);
     try {
       await finalizeMemberVote(supabase, projectId, voterEmail);
       const updatedMembers = await getProjectMembers(supabase, projectId);
       setMembers(updatedMembers);
+
+      // Auto-finalize when max_voters reached
+      const finalizedCount = updatedMembers.filter(m => m.has_finalized).length;
+      if (finalizedCount >= (project.max_voters || 3)) {
+        const result = await finalizeProject(supabase, projectId);
+        const newStatus = result === "tiebreaker" ? "archived" : "finalized";
+        setProject((prev) => (prev ? { ...prev, status: newStatus } : prev));
+        await fetchData();
+      }
     } catch (err) {
       console.error("Finalize failed:", err);
     } finally {
       setFinalizing(false);
     }
-  }, [supabase, hasFinalized, projectId, voterEmail]);
+  }, [supabase, hasFinalized, projectId, voterEmail, project, fetchData]);
 
   const handleFinalizeProject = useCallback(async () => {
     if (!supabase) return;
     try {
-      await updateProjectStatus(supabase, projectId, "finalized");
-      setProject((prev) => (prev ? { ...prev, status: "finalized" } : prev));
+      const result = await finalizeProject(supabase, projectId);
+      const newStatus = result === "tiebreaker" ? "archived" : "finalized";
+      setProject((prev) => (prev ? { ...prev, status: newStatus } : prev));
+      await fetchData();
     } catch (err) {
       console.error("Finalize project failed:", err);
     }
-  }, [supabase, projectId]);
+  }, [supabase, projectId, fetchData]);
+
+  const handleForceClose = useCallback(async () => {
+    if (!supabase) return;
+    if (!confirm("Tem certeza que deseja encerrar a votação? Membros que não votaram serão desconsiderados.")) return;
+    try {
+      const result = await forceCloseVoting(supabase, projectId);
+      const newStatus = result === "tiebreaker" ? "archived" : "finalized";
+      setProject((prev) => (prev ? { ...prev, status: newStatus } : prev));
+      await fetchData();
+    } catch (err) {
+      console.error("Force close failed:", err);
+    }
+  }, [supabase, projectId, fetchData]);
 
   const handleClearVotes = useCallback(async () => {
     if (!supabase) return;
@@ -460,6 +488,40 @@ export default function ProjectVotingPage() {
 
             {/* Actions */}
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {/* Voting progress */}
+              {project.status === "voting" && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 10, background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)" }}>
+                  <Users size={14} color="rgba(255,255,255,0.8)" />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>
+                    {members.filter(m => m.has_finalized).length} de {project.max_voters || 3}
+                  </span>
+                </div>
+              )}
+
+              {/* Force close button - any member can close */}
+              {project.status === "voting" && votes.length > 0 && (
+                <button
+                  onClick={handleForceClose}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "8px 16px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(246,146,30,0.4)",
+                    background: "rgba(246,146,30,0.15)",
+                    color: "#fbbf24",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  <Lock size={14} /> Encerrar Votação
+                </button>
+              )}
+
               {/* Clear votes button - only for owner */}
               {isOwner && votes.length > 0 && (
                 <button
@@ -587,6 +649,36 @@ export default function ProjectVotingPage() {
             <p style={{ fontWeight: 700, fontSize: 14, color: "var(--success)", margin: 0 }}>
               Projeto finalizado com sucesso!
             </p>
+          </div>
+        )}
+
+        {/* Tiebreaker (Desempate) banner */}
+        {project.status === "archived" && (
+          <div
+            style={{
+              background: "linear-gradient(135deg, rgba(246,146,30,0.1) 0%, rgba(246,146,30,0.04) 100%)",
+              border: "2px solid var(--primary)",
+              borderRadius: 16,
+              padding: "20px 28px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 20,
+              gap: 16,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <Swords size={24} color="var(--primary)" />
+              <div>
+                <p style={{ fontWeight: 700, fontSize: 15, color: "var(--foreground)", margin: 0 }}>
+                  Desempate em andamento
+                </p>
+                <p style={{ fontSize: 12, color: "var(--foreground-muted)", margin: 0 }}>
+                  {tiebreakerItems.length} item(ns) empatado(s). Vote apenas entre as opções mais votadas para desempatar.
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -755,7 +847,15 @@ export default function ProjectVotingPage() {
                 )}
 
                 {items.map((item, idx) => {
-                  const itemOptions = optionsByItem[item.id] ?? [];
+                  const allItemOptions = optionsByItem[item.id] ?? [];
+                  const tieInfo = tiebreakerItems.find(t => t.itemId === item.id);
+                  const isInTiebreaker = project.status === "archived" && !!tieInfo;
+                  // In tiebreaker mode, only show tied options
+                  const itemOptions = isInTiebreaker
+                    ? allItemOptions.filter(o => tieInfo!.tiedOptionIds.includes(o.id))
+                    : allItemOptions;
+                  // Skip items that already have a winner (not tied) in tiebreaker mode
+                  if (project.status === "archived" && !tieInfo) return null;
                   const selected = selections[item.id];
                   const isVoted = !!selected;
 
@@ -826,7 +926,7 @@ export default function ProjectVotingPage() {
                             return (
                               <button
                                 key={opt.id}
-                                disabled={hasFinalized}
+                                disabled={hasFinalized && project.status !== "archived"}
                                 onClick={() => handleSelect(item.id, opt.id)}
                                 style={{
                                   display: "flex",
@@ -838,11 +938,11 @@ export default function ProjectVotingPage() {
                                     ? "2px solid var(--primary)"
                                     : "2px solid var(--border)",
                                   background: isSelected ? "var(--primary-50)" : "var(--bg-card)",
-                                  cursor: hasFinalized ? "default" : "pointer",
+                                  cursor: (hasFinalized && project.status !== "archived") ? "default" : "pointer",
                                   textAlign: "left",
                                   transition: "all 0.15s",
                                   fontFamily: "inherit",
-                                  opacity: hasFinalized ? 0.8 : 1,
+                                  opacity: (hasFinalized && project.status !== "archived") ? 0.8 : 1,
                                 }}
                               >
                                 {/* Radio circle */}

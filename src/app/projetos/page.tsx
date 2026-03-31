@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
-import { getProjects, getProjectMembers, updateProjectStatus, detectTies, type Project } from "@/lib/supabase";
-import { seedAto1Project } from "@/lib/seed-ato1";
+import { getProjects, getProjectMembers, updateProjectStatus, detectTies, finalizeProject, type Project } from "@/lib/supabase";
+import { seedOpaProject } from "@/lib/seed-opa";
 import Header from "@/components/Header";
 import LoginScreen from "@/components/LoginScreen";
 import { Plus, Users, GripVertical, ImageIcon, Vote, LayoutDashboard, AlertTriangle } from "lucide-react";
@@ -46,7 +46,7 @@ export default function ProjetosPage() {
 
     (async () => {
       try {
-        await seedAto1Project(supabase, userEmail, userName, userAvatar);
+        await seedOpaProject(supabase, userEmail, userName, userAvatar);
 
         const data = await getProjects(supabase);
         if (cancelled) return;
@@ -131,7 +131,16 @@ export default function ProjetosPage() {
       setDraggedId(null);
 
       try {
-        await updateProjectStatus(supabase, projectId, targetStatus);
+        if (targetStatus === "finalized" || targetStatus === "archived") {
+          // Use finalizeProject to calculate winners and detect ties
+          const result = await finalizeProject(supabase, projectId);
+          const finalStatus = result === "tiebreaker" ? "archived" : "finalized";
+          setProjects((prev) =>
+            prev.map((p) => (p.id === projectId ? { ...p, status: finalStatus } : p))
+          );
+        } else {
+          await updateProjectStatus(supabase, projectId, targetStatus);
+        }
       } catch {
         setProjects((prev) =>
           prev.map((p) => (p.id === projectId ? { ...p, status: project.status } : p))

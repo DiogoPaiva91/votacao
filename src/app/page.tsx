@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { getProjects, type Project } from "@/lib/supabase";
-import { seedAto1Project } from "@/lib/seed-ato1";
+import { seedOpaProject } from "@/lib/seed-opa";
 import Header from "@/components/Header";
 import LoginScreen from "@/components/LoginScreen";
 import { LayoutDashboard, Vote, Trophy, Archive, Plus, ArrowRight, Loader2 } from "lucide-react";
@@ -25,7 +25,7 @@ export default function Home() {
         const userName = user.user_metadata?.full_name || userEmail.split("@")[0];
         const userAvatar = user.user_metadata?.avatar_url || null;
 
-        await seedAto1Project(supabase, userEmail, userName, userAvatar);
+        await seedOpaProject(supabase, userEmail, userName, userAvatar);
 
         const data = await getProjects(supabase);
         if (cancelled) return;

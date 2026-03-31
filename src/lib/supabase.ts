@@ -8,6 +8,7 @@ export interface Project {
   description: string | null;
   status: 'draft' | 'voting' | 'finalized' | 'archived';
   cover_image: string | null;
+  max_voters: number;
   created_by_email: string;
   created_by_name: string;
   created_by_avatar: string | null;
@@ -35,6 +36,7 @@ export interface VotingItem {
   type: 'single_choice' | 'image_select' | 'approval';
   position: number;
   max_winners: number;
+  winner_option_id: string | null;
   created_at: string;
 }
 
@@ -383,6 +385,64 @@ export async function clearProjectVotes(sb: SupabaseClient, projectId: string) {
   await sb.from('projects')
     .update({ status: 'voting', updated_at: new Date().toISOString() })
     .eq('id', projectId);
+}
+
+// ==================== FINALIZE / FORCE CLOSE ====================
+
+export async function finalizeProject(sb: SupabaseClient, projectId: string): Promise<'finalized' | 'tiebreaker'> {
+  // 1. Calculate winners and detect ties
+  const results = await getWinningOptions(sb, projectId);
+  const ties = results.filter(r => r.isTied);
+
+  // 2. If there are ties, create tiebreaker rounds and move to Desempate
+  if (ties.length > 0) {
+    for (const tie of ties) {
+      const tiedIds = tie.tiedOptions.map(o => o.id);
+      await createTiebreakerRound(sb, projectId, tie.item.id, tiedIds);
+    }
+    // Save winners for non-tied items
+    for (const r of results) {
+      if (!r.isTied && r.winners.length > 0) {
+        await sb.from('voting_items')
+          .update({ winner_option_id: r.winners[0].option.id })
+          .eq('id', r.item.id);
+      }
+    }
+    await updateProjectStatus(sb, projectId, 'archived');
+    return 'tiebreaker';
+  }
+
+  // 3. No ties — store winner_option_id on each voting_item and finalize
+  for (const r of results) {
+    if (r.winners.length > 0) {
+      await sb.from('voting_items')
+        .update({ winner_option_id: r.winners[0].option.id })
+        .eq('id', r.item.id);
+    }
+  }
+  await updateProjectStatus(sb, projectId, 'finalized');
+  return 'finalized';
+}
+
+export async function forceCloseVoting(sb: SupabaseClient, projectId: string): Promise<'finalized' | 'tiebreaker'> {
+  // Mark all non-finalized members as finalized
+  await sb.from('project_members')
+    .update({ has_finalized: true, finalized_at: new Date().toISOString() })
+    .eq('project_id', projectId)
+    .eq('has_finalized', false);
+
+  return finalizeProject(sb, projectId);
+}
+
+export async function deleteProject(sb: SupabaseClient, projectId: string) {
+  await sb.from('votes').delete().eq('project_id', projectId);
+  await sb.from('tiebreaker_rounds').delete().eq('project_id', projectId);
+  await sb.from('voting_options').delete().eq('project_id', projectId);
+  await sb.from('voting_items').delete().eq('project_id', projectId);
+  await sb.from('documents').delete().eq('project_id', projectId);
+  await sb.from('project_members').delete().eq('project_id', projectId);
+  const { error } = await sb.from('projects').delete().eq('id', projectId);
+  if (error) throw error;
 }
 
 export async function getFinalizedProjects(sb: SupabaseClient) {
