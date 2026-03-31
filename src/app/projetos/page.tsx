@@ -387,6 +387,16 @@ export default function ProjetosPage() {
                   </span>
                 </div>
                 {modalProject.description && <p style={{ fontSize: 13, color: "var(--foreground-muted)", lineHeight: 1.5, margin: 0 }}>{modalProject.description}</p>}
+                <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+                  <span style={{ fontSize: 11, color: "var(--foreground-subtle)", display: "flex", alignItems: "center", gap: 4 }}>
+                    <Users size={12} /> {modalProject.max_voters || 3} decisores
+                  </span>
+                  {(modalProject.required_winners || 1) > 1 && (
+                    <span style={{ fontSize: 11, color: "var(--primary)", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                      <Trophy size={12} /> {modalProject.required_winners} vencedores
+                    </span>
+                  )}
+                </div>
               </div>
               <button onClick={() => setModalProject(null)} style={{ background: "var(--bg-muted)", border: "none", borderRadius: 10, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
                 <X size={16} color="var(--foreground-muted)" />
@@ -586,9 +596,16 @@ function ProjectCard({ project, memberCount, voteProgress, isDragging, tieCount,
               {project.created_by_name || project.created_by_email}
             </span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 600, color: "var(--foreground-muted)" }}>
-            <Users size={14} />
-            {memberCount}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {(project.required_winners || 1) > 1 && (
+              <span style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 700, color: "var(--primary)" }} title={`${project.required_winners} vencedores necessários`}>
+                <Trophy size={12} /> {project.required_winners}
+              </span>
+            )}
+            <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 600, color: "var(--foreground-muted)" }}>
+              <Users size={14} />
+              {memberCount}
+            </span>
           </div>
         </div>
       </div>

@@ -40,6 +40,8 @@ import {
   Vote,
   ChevronDown,
   ChevronUp,
+  Users,
+  Trophy,
 } from "lucide-react";
 
 // ---------- style helpers ----------
@@ -185,6 +187,10 @@ function CriarProjetoPage() {
   const [projectDesc, setProjectDesc] = useState("");
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
+
+  // Voting config
+  const [maxVoters, setMaxVoters] = useState(3);
+  const [requiredWinners, setRequiredWinners] = useState(1);
 
   // Section 2: Briefing & Attachments
   const [briefingFiles, setBriefingFiles] = useState<BriefingFile[]>([]);
@@ -500,6 +506,8 @@ Responda APENAS com JSON válido (sem markdown, sem explicação):
         description: projectDesc.trim() || null,
         status: "draft",
         cover_image: coverUrl,
+        max_voters: maxVoters,
+        required_winners: requiredWinners,
         created_by_email: userEmail,
         created_by_name: userName,
         created_by_avatar: userAvatar,
@@ -886,6 +894,62 @@ Responda APENAS com JSON válido (sem markdown, sem explicação):
               })}
             </div>
           )}
+        </div>
+
+        {/* ======== VOTING CONFIG ======== */}
+        <div style={cardStyle}>
+          <div style={sectionTitle}>
+            <Settings size={20} style={{ color: "var(--fips-cyan)" }} />
+            Configurações da Votação
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+            <div>
+              <label style={labelStyle}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <Users size={14} style={{ color: "var(--fips-blue)" }} />
+                  Número de Decisores
+                </span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={maxVoters}
+                onChange={(e) => setMaxVoters(Math.max(1, parseInt(e.target.value) || 1))}
+                style={{ ...inputStyle, padding: "10px 14px" }}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
+                title="Quantas pessoas precisam votar neste projeto"
+              />
+              <p style={{ fontSize: 11, color: "var(--foreground-subtle)", margin: "6px 0 0", lineHeight: 1.4 }}>
+                Quantas pessoas precisam votar neste projeto
+              </p>
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <Trophy size={14} style={{ color: "var(--primary)" }} />
+                  Vencedores Necessários
+                </span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={requiredWinners}
+                onChange={(e) => setRequiredWinners(Math.max(1, parseInt(e.target.value) || 1))}
+                style={{ ...inputStyle, padding: "10px 14px" }}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
+                title="Quantos itens vencedores este projeto precisa selecionar"
+              />
+              <p style={{ fontSize: 11, color: "var(--foreground-subtle)", margin: "6px 0 0", lineHeight: 1.4 }}>
+                Quantos itens vencedores este projeto precisa
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* ======== SECTION 3: Voting Items ======== */}

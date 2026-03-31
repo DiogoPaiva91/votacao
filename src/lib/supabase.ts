@@ -9,6 +9,7 @@ export interface Project {
   status: 'draft' | 'voting' | 'finalized' | 'archived';
   cover_image: string | null;
   max_voters: number;
+  required_winners: number;
   created_by_email: string;
   created_by_name: string;
   created_by_avatar: string | null;
@@ -303,6 +304,26 @@ export async function getWinningOptions(sb: SupabaseClient, projectId: string): 
   }
 
   return results;
+}
+
+export async function getProjectTopWinners(
+  sb: SupabaseClient,
+  projectId: string,
+): Promise<WinnerResult[]> {
+  const project = await getProject(sb, projectId);
+  const results = await getWinningOptions(sb, projectId);
+  const requiredWinners = project?.required_winners || 1;
+
+  // Rank resolved items by winner vote count (higher = stronger consensus)
+  const resolved = results
+    .filter(r => r.winners.length > 0 && !r.isTied)
+    .sort((a, b) => {
+      const aVotes = a.winners[0]?.voteCount || 0;
+      const bVotes = b.winners[0]?.voteCount || 0;
+      return bVotes - aVotes;
+    });
+
+  return resolved.slice(0, requiredWinners);
 }
 
 // ==================== TIEBREAKER ====================

@@ -44,7 +44,30 @@ import {
   AlertTriangle,
   Swords,
   Trash2,
+  Maximize2,
+  X,
+  FileText as FileTextIcon,
+  Presentation,
+  Table,
 } from "lucide-react";
+
+// ─── File helpers ───────────────────────────────────────────
+const IMAGE_EXTS = ["jpg", "jpeg", "png", "gif", "webp", "svg"];
+
+function isImageFileType(fileType: string | null): boolean {
+  if (!fileType) return false;
+  return IMAGE_EXTS.includes(fileType.replace(".", "").toLowerCase());
+}
+
+function getOptionFileIcon(fileType: string | null) {
+  if (!fileType) return { icon: FileTextIcon, color: "#6b7280", bg: "rgba(107,114,128,0.1)", label: "FILE" };
+  const ext = fileType.replace(".", "").toLowerCase();
+  if (["ppt", "pptx"].includes(ext)) return { icon: Presentation, color: "#f6921e", bg: "rgba(246,146,30,0.1)", label: ext.toUpperCase() };
+  if (ext === "pdf") return { icon: FileTextIcon, color: "#ef4444", bg: "rgba(239,68,68,0.1)", label: "PDF" };
+  if (["doc", "docx"].includes(ext)) return { icon: FileTextIcon, color: "#3b82f6", bg: "rgba(59,130,246,0.1)", label: ext.toUpperCase() };
+  if (["xls", "xlsx", "csv"].includes(ext)) return { icon: Table, color: "#22c55e", bg: "rgba(34,197,94,0.1)", label: ext.toUpperCase() };
+  return { icon: FileTextIcon, color: "#6b7280", bg: "rgba(107,114,128,0.1)", label: ext.toUpperCase() };
+}
 
 // ─── Status Badge ───────────────────────────────────────────
 function StatusBadge({ status }: { status: Project["status"] }) {
@@ -203,6 +226,7 @@ export default function ProjectVotingPage() {
   const [selections, setSelections] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const voterEmail = user?.email ?? "";
   const voterName = user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "";
@@ -498,6 +522,16 @@ export default function ProjectVotingPage() {
                 </div>
               )}
 
+              {/* Required winners badge */}
+              {(project.required_winners || 1) > 1 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 10, background: "rgba(246,146,30,0.15)", border: "1px solid rgba(246,146,30,0.3)" }} title="Quantos itens vencedores este projeto precisa">
+                  <Trophy size={14} color="#fbbf24" />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#fbbf24" }}>
+                    {project.required_winners} vencedores
+                  </span>
+                </div>
+              )}
+
               {/* Force close button - any member can close */}
               {project.status === "voting" && votes.length > 0 && (
                 <button
@@ -649,9 +683,16 @@ export default function ProjectVotingPage() {
             }}
           >
             <CheckCircle2 size={22} color="var(--success)" />
-            <p style={{ fontWeight: 700, fontSize: 14, color: "var(--success)", margin: 0 }}>
-              Projeto finalizado com sucesso!
-            </p>
+            <div>
+              <p style={{ fontWeight: 700, fontSize: 14, color: "var(--success)", margin: 0 }}>
+                Projeto finalizado com sucesso!
+              </p>
+              {(project.required_winners || 1) > 1 && (
+                <p style={{ fontSize: 12, color: "var(--foreground-muted)", margin: "4px 0 0" }}>
+                  Top {project.required_winners} itens selecionados como vencedores do projeto.
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -997,13 +1038,18 @@ export default function ProjectVotingPage() {
                         <div
                           style={{
                             display: "grid",
-                            gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-                            gap: 12,
+                            gridTemplateColumns: project.status === "archived"
+                              ? "repeat(auto-fill, minmax(280px, 1fr))"
+                              : "repeat(auto-fill, minmax(220px, 1fr))",
+                            gap: 14,
                           }}
                         >
                           {itemOptions.map((opt) => {
                             const isSelected = selected === opt.id;
                             const count = voteCountByOption[opt.id] ?? 0;
+                            const hasImage = !!opt.image_url;
+                            const hasFile = !!opt.file_url && !hasImage;
+                            const fileIcon = hasFile ? getOptionFileIcon(opt.file_type) : null;
                             return (
                               <button
                                 key={opt.id}
@@ -1011,33 +1057,86 @@ export default function ProjectVotingPage() {
                                 onClick={() => handleSelect(item.id, opt.id)}
                                 style={{
                                   position: "relative",
-                                  borderRadius: 14,
+                                  borderRadius: 16,
                                   border: isSelected
-                                    ? "2px solid var(--primary)"
+                                    ? "3px solid var(--primary)"
                                     : "2px solid var(--border)",
                                   background: isSelected ? "var(--primary-50)" : "var(--bg-card)",
                                   cursor: hasFinalized ? "default" : "pointer",
                                   overflow: "hidden",
                                   textAlign: "left",
                                   padding: 0,
-                                  transition: "all 0.15s",
+                                  transition: "all 0.2s ease",
                                   fontFamily: "inherit",
                                   opacity: hasFinalized ? 0.8 : 1,
+                                  boxShadow: isSelected
+                                    ? "0 4px 20px rgba(246,146,30,0.25)"
+                                    : "0 2px 8px rgba(0,0,0,0.04)",
                                 }}
                               >
-                                {opt.image_url && (
-                                  <img
-                                    src={opt.image_url}
-                                    alt={opt.label}
-                                    style={{
-                                      width: "100%",
-                                      height: 140,
-                                      objectFit: "cover",
-                                      display: "block",
-                                    }}
-                                  />
+                                {/* Image preview */}
+                                {hasImage && (
+                                  <div style={{ position: "relative" }}>
+                                    <img
+                                      src={opt.image_url!}
+                                      alt={opt.label}
+                                      style={{
+                                        width: "100%",
+                                        height: project.status === "archived" ? 240 : 200,
+                                        objectFit: "cover",
+                                        display: "block",
+                                      }}
+                                    />
+                                    {/* Zoom button */}
+                                    <div
+                                      onClick={(e) => { e.stopPropagation(); setLightboxUrl(opt.image_url!); }}
+                                      style={{
+                                        position: "absolute",
+                                        bottom: 8,
+                                        right: 8,
+                                        width: 32,
+                                        height: 32,
+                                        borderRadius: 10,
+                                        background: "rgba(0,0,0,0.55)",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        cursor: "pointer",
+                                        backdropFilter: "blur(4px)",
+                                        transition: "background 0.15s",
+                                      }}
+                                      title="Ampliar imagem"
+                                    >
+                                      <Maximize2 size={16} color="#fff" />
+                                    </div>
+                                  </div>
                                 )}
-                                <div style={{ padding: "10px 14px" }}>
+                                {/* File preview (non-image) */}
+                                {hasFile && fileIcon && (
+                                  <div
+                                    style={{
+                                      height: 120,
+                                      display: "flex",
+                                      flexDirection: "column",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      background: fileIcon.bg,
+                                      gap: 8,
+                                    }}
+                                  >
+                                    <fileIcon.icon size={36} color={fileIcon.color} />
+                                    <span style={{ fontSize: 11, fontWeight: 700, color: fileIcon.color }}>{fileIcon.label}</span>
+                                    {opt.file_url && (
+                                      <span
+                                        onClick={(e) => { e.stopPropagation(); window.open(opt.file_url!, "_blank"); }}
+                                        style={{ fontSize: 10, color: "var(--fips-blue)", cursor: "pointer", textDecoration: "underline" }}
+                                      >
+                                        Visualizar
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                                <div style={{ padding: "12px 14px" }}>
                                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                     <p style={{ fontWeight: 600, fontSize: 13, color: "var(--foreground)", margin: 0 }}>
                                       {opt.label}
@@ -1046,7 +1145,7 @@ export default function ProjectVotingPage() {
                                   </div>
                                   <VoterAvatars voters={votersByOption[opt.id] || []} />
                                   {opt.description && (
-                                    <p style={{ fontSize: 11, color: "var(--foreground-muted)", margin: "4px 0 0" }}>
+                                    <p style={{ fontSize: 11, color: "var(--foreground-muted)", margin: "4px 0 0", lineHeight: 1.4 }}>
                                       {opt.description}
                                     </p>
                                   )}
@@ -1058,17 +1157,17 @@ export default function ProjectVotingPage() {
                                       position: "absolute",
                                       top: 8,
                                       right: 8,
-                                      width: 26,
-                                      height: 26,
+                                      width: 30,
+                                      height: 30,
                                       borderRadius: "50%",
                                       background: "var(--primary)",
                                       display: "flex",
                                       alignItems: "center",
                                       justifyContent: "center",
-                                      boxShadow: "0 2px 8px rgba(246,146,30,0.4)",
+                                      boxShadow: "0 2px 10px rgba(246,146,30,0.5)",
                                     }}
                                   >
-                                    <Check size={14} color="#fff" strokeWidth={3} />
+                                    <Check size={16} color="#fff" strokeWidth={3} />
                                   </div>
                                 )}
                               </button>
@@ -1385,6 +1484,58 @@ export default function ProjectVotingPage() {
           </div>
         </div>
       </div>
+
+      {/* Image Lightbox */}
+      {lightboxUrl && (
+        <div
+          onClick={() => setLightboxUrl(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(0,0,0,0.85)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "zoom-out",
+            backdropFilter: "blur(8px)",
+          }}
+        >
+          <button
+            onClick={() => setLightboxUrl(null)}
+            style={{
+              position: "absolute",
+              top: 20,
+              right: 20,
+              width: 44,
+              height: 44,
+              borderRadius: 12,
+              background: "rgba(255,255,255,0.15)",
+              border: "none",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#fff",
+            }}
+          >
+            <X size={24} />
+          </button>
+          <img
+            src={lightboxUrl}
+            alt=""
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: "90vw",
+              maxHeight: "90vh",
+              objectFit: "contain",
+              borderRadius: 12,
+              boxShadow: "0 8px 40px rgba(0,0,0,0.5)",
+              cursor: "default",
+            }}
+          />
+        </div>
+      )}
 
       {/* Spin animation for loaders */}
       <style>{`

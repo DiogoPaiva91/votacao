@@ -14,6 +14,7 @@ import {
   resolveAcervoItem,
   getFinalizedProjects,
   getWinningOptions,
+  getProjectTopWinners,
   getProjects,
   type AcervoItem,
   type AcervoOption,
@@ -288,7 +289,9 @@ function AcervoPage() {
       setAllProjects(all);
       const results: ProjectWinnerResult[] = [];
       for (const project of finalized) {
-        const winItems = await getWinningOptions(supabase, project.id);
+        const winItems = (project.required_winners || 1) > 1
+          ? await getProjectTopWinners(supabase, project.id)
+          : await getWinningOptions(supabase, project.id);
         results.push({ project, items: winItems });
       }
       setWinners(results);
@@ -841,6 +844,11 @@ function AcervoPage() {
                           <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: "rgba(0,198,76,0.2)", color: "#8be5ad", marginLeft: 4 }}>
                             {w.items.length} {w.items.length === 1 ? "item" : "itens"}
                           </span>
+                          {(w.project.required_winners || 1) > 1 && (
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: "rgba(246,146,30,0.2)", color: "#fbbf24", marginLeft: 4 }}>
+                              Top {w.project.required_winners} vencedores
+                            </span>
+                          )}
                         </div>
                       </div>
                       <Link href={`/projeto/${w.project.id}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "8px 16px", borderRadius: 10, background: "rgba(255,255,255,0.1)", color: "#fff", fontSize: 12, fontWeight: 600, textDecoration: "none", border: "1px solid rgba(255,255,255,0.15)" }}>
@@ -877,6 +885,11 @@ function AcervoPage() {
                                   {idx + 1}
                                 </div>
                                 <span style={{ fontSize: 13, fontWeight: 700, color: "var(--foreground)", flex: 1, paddingRight: 40 }}>{result.item.title}</span>
+                                {(w.project.required_winners || 1) > 1 && hasWinner && (
+                                  <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: idx === 0 ? "linear-gradient(135deg, #fdc24e, #f6921e)" : "rgba(246,146,30,0.1)", color: idx === 0 ? "#fff" : "var(--primary)" }}>
+                                    {idx + 1}º
+                                  </span>
+                                )}
                               </div>
                               {hasWinner ? (
                                 <div>
