@@ -227,6 +227,7 @@ export default function ProjectVotingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [tiebreakerRounds, setTiebreakerRounds] = useState<TiebreakerRound[]>([]);
 
   const voterEmail = user?.email ?? "";
   const voterName = user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "";
@@ -237,13 +238,14 @@ export default function ProjectVotingPage() {
     if (!supabase || !projectId) return;
     setLoading(true);
     try {
-      const [p, m, vi, vo, v, d] = await Promise.all([
+      const [p, m, vi, vo, v, d, tr] = await Promise.all([
         getProject(supabase, projectId),
         getProjectMembers(supabase, projectId),
         getVotingItems(supabase, projectId),
         getVotingOptions(supabase, projectId),
         getProjectVotes(supabase, projectId),
         getProjectDocuments(supabase, projectId),
+        getTiebreakerRounds(supabase, projectId),
       ]);
       setProject(p);
       setMembers(m);
@@ -251,6 +253,7 @@ export default function ProjectVotingPage() {
       setOptions(vo);
       setVotes(v);
       setDocuments(d);
+      setTiebreakerRounds(tr);
 
       // Hydrate existing selections for this user
       const sel: Record<string, string> = {};
@@ -329,11 +332,25 @@ export default function ProjectVotingPage() {
 
   // ── Tiebreaker detection ──
   useEffect(() => {
-    if (!allFinalized || !supabase || !projectId) return;
+    if (!supabase || !projectId) return;
+
+    // When project is in "archived" (desempate), use tiebreaker_rounds from DB
+    if (project?.status === "archived" && tiebreakerRounds.length > 0) {
+      const activeRounds = tiebreakerRounds.filter(r => r.status === "voting");
+      const ties = activeRounds.map(r => ({
+        itemId: r.original_item_id,
+        tiedOptionIds: r.tied_option_ids,
+      }));
+      setTiebreakerItems(ties);
+      return;
+    }
+
+    // Client-side detection for pre-finalization preview
+    if (!allFinalized) return;
     const itemVoteMap: Record<string, Record<string, number>> = {};
     items.forEach(item => {
       const itemOpts = options.filter(o => o.item_id === item.id);
-      const itemVotes = votes.filter(v => v.item_id === item.id);
+      const itemVotes = votes.filter(v => v.item_id === item.id && !v.tiebreaker_round_id);
       const counts: Record<string, number> = {};
       itemOpts.forEach(opt => {
         counts[opt.id] = itemVotes.filter(v => v.option_id === opt.id).length;
@@ -355,7 +372,7 @@ export default function ProjectVotingPage() {
       }
     });
     setTiebreakerItems(ties);
-  }, [allFinalized, items, options, votes, supabase, projectId]);
+  }, [allFinalized, items, options, votes, supabase, projectId, project?.status, tiebreakerRounds]);
 
   // ── Handlers ──
   const handleSelect = useCallback(
