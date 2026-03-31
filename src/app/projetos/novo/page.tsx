@@ -545,11 +545,15 @@ Responda APENAS com JSON válido (sem markdown, sem explicação):
           const validOpts = mi.options.filter((o) => o.label.trim() && (o.file || o.contentText.trim()));
           if (validOpts.length < 2) continue;
 
+          // Auto-detect image_select if any option has an image file
+          const hasImageFile = validOpts.some((o) => o.file && isImageFile(o.file.name));
+          const itemType = hasImageFile ? "image_select" : mi.type;
+
           const votingItem = await createVotingItem(supabase, {
             project_id: project.id,
             title: mi.title.trim(),
             description: mi.description.trim() || null,
-            type: mi.type,
+            type: itemType,
             position: i,
             max_winners: 1,
           });
