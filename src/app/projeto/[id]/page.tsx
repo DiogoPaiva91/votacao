@@ -36,12 +36,14 @@ import {
   Trophy,
   CircleDot,
   Loader2,
+  AlertTriangle,
+  Swords,
 } from "lucide-react";
 
 // ─── Status Badge ───────────────────────────────────────────
 function StatusBadge({ status }: { status: Project["status"] }) {
   const map: Record<string, { label: string; bg: string; color: string }> = {
-    draft: { label: "Rascunho", bg: "rgba(100,116,139,0.12)", color: "#64748b" },
+    draft: { label: "Novo Projeto", bg: "rgba(100,116,139,0.12)", color: "#64748b" },
     voting: { label: "Em Votação", bg: "rgba(246,146,30,0.12)", color: "#f6921e" },
     finalized: { label: "Finalizado", bg: "rgba(0,198,76,0.12)", color: "#00c64c" },
     archived: { label: "Arquivado", bg: "rgba(100,116,139,0.12)", color: "#64748b" },
@@ -132,6 +134,47 @@ function VoteCountBadge({ count }: { count: number }) {
       <Users size={12} />
       {count}
     </span>
+  );
+}
+
+// ─── Voter Avatars ─────────────────────────────────────────
+function VoterAvatars({ voters }: { voters: Vote[] }) {
+  if (!voters || voters.length === 0) return null;
+  return (
+    <div style={{ display: "flex", alignItems: "center", marginTop: 6 }}>
+      {voters.slice(0, 8).map((v, i) => (
+        <div
+          key={v.id}
+          title={v.voter_name}
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: "50%",
+            marginLeft: i > 0 ? -6 : 0,
+            border: "2px solid #fff",
+            overflow: "hidden",
+            background: "var(--gradient-cta)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 9,
+            fontWeight: 700,
+            color: "#fff",
+          }}
+        >
+          {v.voter_avatar ? (
+            <img src={v.voter_avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : (
+            v.voter_name.charAt(0).toUpperCase()
+          )}
+        </div>
+      ))}
+      {voters.length > 8 && (
+        <span style={{ fontSize: 10, fontWeight: 700, color: "var(--foreground-muted)", marginLeft: 4 }}>
+          +{voters.length - 8}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -239,6 +282,47 @@ export default function ProjectVotingPage() {
     });
     return map;
   }, [votes]);
+
+  const votersByOption = useMemo(() => {
+    const map: Record<string, Vote[]> = {};
+    votes.forEach((v) => {
+      if (!map[v.option_id]) map[v.option_id] = [];
+      map[v.option_id].push(v);
+    });
+    return map;
+  }, [votes]);
+
+  const [tiebreakerItems, setTiebreakerItems] = useState<Array<{ itemId: string; tiedOptionIds: string[] }>>([]);
+
+  // ── Tiebreaker detection ──
+  useEffect(() => {
+    if (!allFinalized || !supabase || !projectId) return;
+    const itemVoteMap: Record<string, Record<string, number>> = {};
+    items.forEach(item => {
+      const itemOpts = options.filter(o => o.item_id === item.id);
+      const itemVotes = votes.filter(v => v.item_id === item.id);
+      const counts: Record<string, number> = {};
+      itemOpts.forEach(opt => {
+        counts[opt.id] = itemVotes.filter(v => v.option_id === opt.id).length;
+      });
+      itemVoteMap[item.id] = counts;
+    });
+
+    const ties: Array<{ itemId: string; tiedOptionIds: string[] }> = [];
+    items.forEach(item => {
+      const counts = itemVoteMap[item.id];
+      if (!counts) return;
+      const maxCount = Math.max(...Object.values(counts), 0);
+      if (maxCount === 0) return;
+      const tiedIds = Object.entries(counts)
+        .filter(([, c]) => c === maxCount)
+        .map(([id]) => id);
+      if (tiedIds.length > 1) {
+        ties.push({ itemId: item.id, tiedOptionIds: tiedIds });
+      }
+    });
+    setTiebreakerItems(ties);
+  }, [allFinalized, items, options, votes, supabase, projectId]);
 
   // ── Handlers ──
   const handleSelect = useCallback(
@@ -749,6 +833,7 @@ export default function ProjectVotingPage() {
                                   )}
                                 </div>
                                 <VoteCountBadge count={count} />
+                                <VoterAvatars voters={votersByOption[opt.id] || []} />
                               </button>
                             );
                           })}
@@ -806,6 +891,7 @@ export default function ProjectVotingPage() {
                                     </p>
                                     <VoteCountBadge count={count} />
                                   </div>
+                                  <VoterAvatars voters={votersByOption[opt.id] || []} />
                                   {opt.description && (
                                     <p style={{ fontSize: 11, color: "var(--foreground-muted)", margin: "4px 0 0" }}>
                                       {opt.description}
@@ -871,6 +957,7 @@ export default function ProjectVotingPage() {
                                 </div>
                                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                                   <VoteCountBadge count={count} />
+                                  <VoterAvatars voters={votersByOption[opt.id] || []} />
                                   <button
                                     disabled={hasFinalized}
                                     onClick={() => handleSelect(item.id, opt.id)}
@@ -955,6 +1042,94 @@ export default function ProjectVotingPage() {
                     <p style={{ fontWeight: 700, fontSize: 13, color: "var(--success)", margin: 0 }}>
                       Seu voto foi finalizado e esta bloqueado.
                     </p>
+                  </div>
+                )}
+
+                {/* Tiebreaker section */}
+                {tiebreakerItems.length > 0 && allFinalized && project.status !== "finalized" && (
+                  <div
+                    style={{
+                      background: "linear-gradient(135deg, rgba(246,146,30,0.06) 0%, rgba(239,68,68,0.06) 100%)",
+                      border: "2px solid rgba(246,146,30,0.3)",
+                      borderRadius: 20,
+                      padding: 24,
+                      marginBottom: 24,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+                      <AlertTriangle size={22} color="var(--primary)" />
+                      <div>
+                        <h3 style={{ fontWeight: 700, fontSize: 16, color: "var(--foreground)", margin: 0 }}>
+                          Rodada de Desempate
+                        </h3>
+                        <p style={{ fontSize: 12, color: "var(--foreground-muted)", margin: "2px 0 0" }}>
+                          {tiebreakerItems.length} {tiebreakerItems.length === 1 ? "item empatou" : "itens empataram"}. Vote novamente apenas entre as opções empatadas.
+                        </p>
+                      </div>
+                    </div>
+
+                    {tiebreakerItems.map(({ itemId, tiedOptionIds }) => {
+                      const item = items.find(i => i.id === itemId);
+                      const tiedOpts = options.filter(o => tiedOptionIds.includes(o.id));
+                      if (!item) return null;
+                      return (
+                        <div
+                          key={itemId}
+                          style={{
+                            background: "var(--bg-card)",
+                            borderRadius: 16,
+                            padding: 20,
+                            marginBottom: 12,
+                            border: "1px solid var(--border)",
+                          }}
+                        >
+                          <h4 style={{ fontWeight: 700, fontSize: 14, color: "var(--foreground)", margin: "0 0 12px", display: "flex", alignItems: "center", gap: 8 }}>
+                            <Swords size={16} color="var(--primary)" />
+                            {item.title} — Desempate
+                          </h4>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            {tiedOpts.map(opt => {
+                              const count = votes.filter(v => v.option_id === opt.id && v.item_id === itemId).length;
+                              return (
+                                <button
+                                  key={opt.id}
+                                  onClick={() => handleSelect(itemId, opt.id)}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 12,
+                                    padding: "12px 16px",
+                                    borderRadius: 12,
+                                    border: selections[itemId] === opt.id
+                                      ? "2px solid var(--primary)"
+                                      : "2px solid var(--border)",
+                                    background: selections[itemId] === opt.id ? "var(--primary-50)" : "var(--bg-card)",
+                                    cursor: "pointer",
+                                    textAlign: "left",
+                                    fontFamily: "inherit",
+                                    transition: "all 0.15s",
+                                  }}
+                                >
+                                  <div style={{ flex: 1 }}>
+                                    <p style={{ fontWeight: 600, fontSize: 14, color: "var(--foreground)", margin: 0 }}>
+                                      {opt.label}
+                                    </p>
+                                    {opt.description && (
+                                      <p style={{ fontSize: 12, color: "var(--foreground-muted)", margin: "2px 0 0" }}>
+                                        {opt.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground-muted)" }}>
+                                    {count} votos
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

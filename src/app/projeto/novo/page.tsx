@@ -44,6 +44,7 @@ interface LocalVotingItem {
   title: string;
   description: string;
   type: "single_choice" | "image_select" | "approval";
+  max_winners: number;
   options: LocalOption[];
 }
 
@@ -251,11 +252,11 @@ export default function NovoProjetoPage() {
   function addVotingItem() {
     setVotingItems((prev) => [
       ...prev,
-      { title: "", description: "", type: "single_choice", options: [] },
+      { title: "", description: "", type: "single_choice", max_winners: 1, options: [] },
     ]);
   }
 
-  function updateVotingItem(idx: number, field: keyof LocalVotingItem, value: string) {
+  function updateVotingItem(idx: number, field: keyof LocalVotingItem, value: string | number) {
     setVotingItems((prev) =>
       prev.map((item, i) => {
         if (i !== idx) return item;
@@ -511,6 +512,7 @@ Gere entre 3 e 8 itens relevantes baseados no briefing.`,
           description: vi.description.trim() || null,
           type: vi.type,
           position: i,
+          max_winners: vi.max_winners || 1,
         });
 
         for (let j = 0; j < vi.options.length; j++) {
@@ -1046,6 +1048,24 @@ Gere entre 3 e 8 itens relevantes baseados no briefing.`,
                       <option value="image_select">Seleção de imagem</option>
                       <option value="approval">Aprovação (aprovar/rejeitar)</option>
                     </select>
+                  </div>
+
+                  {/* Max winners */}
+                  <div>
+                    <label style={labelStyle}>Quantidade de vencedores</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={item.options.length || 10}
+                      value={item.max_winners}
+                      onChange={(e) => updateVotingItem(idx, "max_winners", Math.max(1, parseInt(e.target.value) || 1))}
+                      onFocus={handleFocus}
+                      onBlur={handleBlur}
+                      style={{ ...inputStyle, width: 120 }}
+                    />
+                    <span style={{ fontSize: 11, color: "var(--foreground-subtle, #7b8c96)", marginLeft: 8 }}>
+                      Ex: 10 imagens, mas só 1 vencedor
+                    </span>
                   </div>
 
                   {/* Options */}

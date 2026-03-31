@@ -3,10 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
-import { getProjects, getProjectMembers, updateProjectStatus, type Project } from "@/lib/supabase";
+import { getProjects, getProjectMembers, updateProjectStatus, detectTies, type Project } from "@/lib/supabase";
+import { seedAto1Project } from "@/lib/seed-ato1";
 import Header from "@/components/Header";
 import LoginScreen from "@/components/LoginScreen";
-import { Plus, Users, GripVertical, ImageIcon, Vote, LayoutDashboard } from "lucide-react";
+import { Plus, Users, GripVertical, ImageIcon, Vote, LayoutDashboard, AlertTriangle } from "lucide-react";
 
 type KanbanStatus = Project["status"];
 
@@ -18,7 +19,7 @@ interface ColumnDef {
 }
 
 const COLUMNS: ColumnDef[] = [
-  { status: "draft", label: "Rascunho", color: "#6b7280", bgTint: "rgba(107,114,128,0.08)" },
+  { status: "draft", label: "Novo Projeto", color: "#6b7280", bgTint: "rgba(107,114,128,0.08)" },
   { status: "voting", label: "Em Votação", color: "var(--fips-blue)", bgTint: "rgba(0,144,208,0.08)" },
   { status: "finalized", label: "Finalizado", color: "var(--success)", bgTint: "rgba(0,198,76,0.08)" },
   { status: "archived", label: "Arquivado", color: "var(--foreground-muted)", bgTint: "rgba(71,85,105,0.08)" },
@@ -32,18 +33,35 @@ export default function Home() {
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<KanbanStatus | null>(null);
+  const [tiedProjects, setTiedProjects] = useState<Record<string, number>>({});
 
   // Load projects
   useEffect(() => {
     if (!supabase || !user) return;
 
     let cancelled = false;
+    const userEmail = user.email || "";
+    const userName = user.user_metadata?.full_name || userEmail.split("@")[0];
+    const userAvatar = user.user_metadata?.avatar_url || null;
 
     (async () => {
       try {
+        // Seed ATO 1 if not exists
+        const seeded = await seedAto1Project(supabase, userEmail, userName, userAvatar);
+
         const data = await getProjects(supabase);
         if (cancelled) return;
         setProjects(data);
+
+        // Detect ties in finalized projects
+        const tiedCounts: Record<string, number> = {};
+        for (const p of data.filter(pr => pr.status === "voting" || pr.status === "finalized")) {
+          try {
+            const ties = await detectTies(supabase, p.id);
+            if (ties.length > 0) tiedCounts[p.id] = ties.length;
+          } catch { /* ignore */ }
+        }
+        if (!cancelled) setTiedProjects(tiedCounts);
 
         // Load member counts for each project
         const counts: Record<string, number> = {};
@@ -370,6 +388,86 @@ export default function Home() {
           })}
         </div>
       </div>
+
+      {/* Tiebreaker Section */}
+      {Object.keys(tiedProjects).length > 0 && (
+        <div style={{ padding: "0 16px 32px", maxWidth: 1440, margin: "0 auto" }}>
+          <div
+            style={{
+              background: "linear-gradient(135deg, rgba(246,146,30,0.06) 0%, rgba(239,68,68,0.06) 100%)",
+              border: "2px solid rgba(246,146,30,0.25)",
+              borderRadius: 20,
+              padding: "24px 28px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+              <div
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 12,
+                  background: "rgba(246,146,30,0.12)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <AlertTriangle size={20} color="var(--primary)" />
+              </div>
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--foreground)", margin: 0 }}>
+                  Desempates Pendentes
+                </h3>
+                <p style={{ fontSize: 12, color: "var(--foreground-muted)", margin: 0 }}>
+                  Estes projetos têm itens empatados que precisam de uma rodada extra de votação
+                </p>
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {Object.entries(tiedProjects).map(([projId, tieCount]) => {
+                const proj = projects.find(p => p.id === projId);
+                if (!proj) return null;
+                return (
+                  <Link
+                    key={projId}
+                    href={`/projeto/${projId}`}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "14px 18px",
+                      borderRadius: 14,
+                      background: "var(--bg-card)",
+                      border: "1px solid var(--border)",
+                      textDecoration: "none",
+                      transition: "transform 0.15s, box-shadow 0.15s",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <AlertTriangle size={16} color="var(--primary)" />
+                      <span style={{ fontSize: 14, fontWeight: 600, color: "var(--foreground)" }}>
+                        {proj.name}
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        padding: "4px 12px",
+                        borderRadius: 99,
+                        background: "rgba(246,146,30,0.12)",
+                        color: "var(--primary)",
+                      }}
+                    >
+                      {tieCount} {tieCount === 1 ? "empate" : "empates"}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Responsive styles */}
       <style jsx global>{`

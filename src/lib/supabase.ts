@@ -34,6 +34,7 @@ export interface VotingItem {
   description: string | null;
   type: 'single_choice' | 'image_select' | 'approval';
   position: number;
+  max_winners: number;
   created_at: string;
 }
 
@@ -58,7 +59,28 @@ export interface Vote {
   voter_email: string;
   voter_name: string;
   voter_avatar: string | null;
+  tiebreaker_round_id: string | null;
   created_at: string;
+}
+
+export interface TiebreakerRound {
+  id: string;
+  project_id: string;
+  original_item_id: string;
+  round_number: number;
+  status: 'voting' | 'resolved';
+  tied_option_ids: string[];
+  winner_option_id: string | null;
+  created_at: string;
+}
+
+export interface WinnerResult {
+  item: VotingItem;
+  winners: Array<{ option: VotingOption; voteCount: number }>;
+  totalVotes: number;
+  isTied: boolean;
+  tiedOptions: VotingOption[];
+  tiebreakerRound: TiebreakerRound | null;
 }
 
 export interface Document {
@@ -156,7 +178,7 @@ export async function getProjectVotes(sb: SupabaseClient, projectId: string) {
   return data as Vote[];
 }
 
-export async function submitVote(sb: SupabaseClient, vote: Omit<Vote, 'id' | 'created_at'>) {
+export async function submitVote(sb: SupabaseClient, vote: Omit<Vote, 'id' | 'created_at' | 'tiebreaker_round_id'>) {
   const { data, error } = await sb.from('votes')
     .upsert(vote, { onConflict: 'item_id,voter_email' })
     .select().single();
@@ -211,44 +233,140 @@ export async function uploadFile(sb: SupabaseClient, projectId: string, file: Fi
 
 // ==================== WINNERS / RESULTS ====================
 
-export async function getWinningOptions(sb: SupabaseClient, projectId: string) {
-  const [items, options, allVotes] = await Promise.all([
+export async function getWinningOptions(sb: SupabaseClient, projectId: string): Promise<WinnerResult[]> {
+  const [items, options, allVotes, tiebreakerRounds] = await Promise.all([
     getVotingItems(sb, projectId),
     getVotingOptions(sb, projectId),
     getProjectVotes(sb, projectId),
+    getTiebreakerRounds(sb, projectId),
   ]);
 
-  const results: Array<{
-    item: VotingItem;
-    winner: VotingOption | null;
-    voteCount: number;
-    totalVotes: number;
-  }> = [];
+  const results: WinnerResult[] = [];
 
   for (const item of items) {
     const itemOpts = options.filter(o => o.item_id === item.id);
-    const itemVotes = allVotes.filter(v => v.item_id === item.id);
+    const itemVotes = allVotes.filter(v => v.item_id === item.id && !v.tiebreaker_round_id);
+    const maxWinners = item.max_winners || 1;
 
-    let maxCount = 0;
-    let winnerId: string | null = null;
+    // Count votes per option
+    const voteCounts: Array<{ option: VotingOption; count: number }> = itemOpts.map(opt => ({
+      option: opt,
+      count: itemVotes.filter(v => v.option_id === opt.id).length,
+    }));
 
-    for (const opt of itemOpts) {
-      const count = itemVotes.filter(v => v.option_id === opt.id).length;
-      if (count > maxCount) {
-        maxCount = count;
-        winnerId = opt.id;
+    // Sort by count descending
+    voteCounts.sort((a, b) => b.count - a.count);
+
+    // Get top N winners
+    const topWinners = voteCounts.slice(0, maxWinners).filter(w => w.count > 0);
+
+    // Check for ties at the cutoff point
+    const cutoffCount = topWinners.length > 0 ? topWinners[topWinners.length - 1].count : 0;
+    const tiedAtCutoff = voteCounts.filter(w => w.count === cutoffCount && w.count > 0);
+    const isTied = tiedAtCutoff.length > maxWinners - (topWinners.filter(w => w.count > cutoffCount).length);
+
+    // Check if there's an active tiebreaker round
+    const activeRound = tiebreakerRounds.find(
+      r => r.original_item_id === item.id && r.status === 'voting'
+    );
+    const resolvedRound = tiebreakerRounds.find(
+      r => r.original_item_id === item.id && r.status === 'resolved'
+    );
+
+    // If tiebreaker resolved, use its winner
+    let finalWinners = topWinners.map(w => ({ option: w.option, voteCount: w.count }));
+    if (resolvedRound && resolvedRound.winner_option_id) {
+      const tiedOpts = tiedAtCutoff.map(w => w.option);
+      const resolvedWinner = tiedOpts.find(o => o.id === resolvedRound.winner_option_id);
+      if (resolvedWinner) {
+        // Replace tied options with the resolved winner
+        finalWinners = voteCounts
+          .filter(w => w.count > cutoffCount)
+          .map(w => ({ option: w.option, voteCount: w.count }));
+        const resolvedEntry = voteCounts.find(w => w.option.id === resolvedRound.winner_option_id);
+        if (resolvedEntry) {
+          finalWinners.push({ option: resolvedEntry.option, voteCount: resolvedEntry.count });
+        }
       }
     }
 
     results.push({
       item,
-      winner: itemOpts.find(o => o.id === winnerId) ?? null,
-      voteCount: maxCount,
+      winners: finalWinners,
       totalVotes: itemVotes.length,
+      isTied: isTied && !resolvedRound,
+      tiedOptions: isTied ? tiedAtCutoff.map(w => w.option) : [],
+      tiebreakerRound: activeRound || resolvedRound || null,
     });
   }
 
   return results;
+}
+
+// ==================== TIEBREAKER ====================
+
+export async function getTiebreakerRounds(sb: SupabaseClient, projectId: string) {
+  const { data, error } = await sb.from('tiebreaker_rounds')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: true });
+  if (error) return [] as TiebreakerRound[];
+  return data as TiebreakerRound[];
+}
+
+export async function createTiebreakerRound(
+  sb: SupabaseClient,
+  projectId: string,
+  originalItemId: string,
+  tiedOptionIds: string[],
+  roundNumber: number = 1,
+) {
+  const { data, error } = await sb.from('tiebreaker_rounds').insert({
+    project_id: projectId,
+    original_item_id: originalItemId,
+    round_number: roundNumber,
+    status: 'voting',
+    tied_option_ids: tiedOptionIds,
+  }).select().single();
+  if (error) throw error;
+  return data as TiebreakerRound;
+}
+
+export async function submitTiebreakerVote(
+  sb: SupabaseClient,
+  vote: Omit<Vote, 'id' | 'created_at'>,
+) {
+  const { data, error } = await sb.from('votes')
+    .upsert(vote, { onConflict: 'item_id,voter_email' })
+    .select().single();
+  if (error) throw error;
+  return data as Vote;
+}
+
+export async function resolveTiebreakerRound(
+  sb: SupabaseClient,
+  roundId: string,
+  winnerOptionId: string,
+) {
+  const { error } = await sb.from('tiebreaker_rounds')
+    .update({ status: 'resolved', winner_option_id: winnerOptionId })
+    .eq('id', roundId);
+  if (error) throw error;
+}
+
+export async function detectTies(sb: SupabaseClient, projectId: string) {
+  const results = await getWinningOptions(sb, projectId);
+  return results.filter(r => r.isTied);
+}
+
+export async function getVotersByOption(sb: SupabaseClient, projectId: string) {
+  const votes = await getProjectVotes(sb, projectId);
+  const map: Record<string, Vote[]> = {};
+  votes.forEach(v => {
+    if (!map[v.option_id]) map[v.option_id] = [];
+    map[v.option_id].push(v);
+  });
+  return map;
 }
 
 export async function getFinalizedProjects(sb: SupabaseClient) {

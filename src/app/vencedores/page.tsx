@@ -8,8 +8,7 @@ import {
   getFinalizedProjects,
   getWinningOptions,
   type Project,
-  type VotingItem,
-  type VotingOption,
+  type WinnerResult,
 } from "@/lib/supabase";
 import Header from "@/components/Header";
 import LoginScreen from "@/components/LoginScreen";
@@ -23,19 +22,13 @@ import {
   Clock,
   Download,
   FileDown,
-  Image,
 } from "lucide-react";
 
 type TimeFilter = "all" | "today" | "week" | "month";
 
-interface WinnerResult {
+interface ProjectWinnerResult {
   project: Project;
-  items: Array<{
-    item: VotingItem;
-    winner: VotingOption | null;
-    voteCount: number;
-    totalVotes: number;
-  }>;
+  items: WinnerResult[];
 }
 
 function isInPeriod(dateStr: string, filter: TimeFilter): boolean {
@@ -70,7 +63,7 @@ const timeLabels: Record<TimeFilter, string> = {
 
 // ---------- Export helpers ----------
 
-function generateTxtContent(results: WinnerResult[]): string {
+function generateTxtContent(results: ProjectWinnerResult[]): string {
   let txt = "═══════════════════════════════════════════\n";
   txt += "        RELATÓRIO DE VENCEDORES - FIPS\n";
   txt += "═══════════════════════════════════════════\n";
@@ -85,13 +78,18 @@ function generateTxtContent(results: WinnerResult[]): string {
 
     for (const result of w.items) {
       txt += `  🏆 ${result.item.title}\n`;
-      if (result.winner) {
-        txt += `     Vencedor: ${result.winner.label}\n`;
-        if (result.winner.description) txt += `     Detalhe: ${result.winner.description}\n`;
-        txt += `     Votos: ${result.voteCount} de ${result.totalVotes}\n`;
-        const pct = result.totalVotes > 0 ? Math.round((result.voteCount / result.totalVotes) * 100) : 0;
-        txt += `     Percentual: ${pct}%\n`;
-        if (result.winner.file_url) txt += `     Arquivo: ${result.winner.file_url}\n`;
+      if (result.winners.length > 0) {
+        for (const win of result.winners) {
+          txt += `     Vencedor: ${win.option.label}\n`;
+          if (win.option.description) txt += `     Detalhe: ${win.option.description}\n`;
+          txt += `     Votos: ${win.voteCount} de ${result.totalVotes}\n`;
+          const pct = result.totalVotes > 0 ? Math.round((win.voteCount / result.totalVotes) * 100) : 0;
+          txt += `     Percentual: ${pct}%\n`;
+          if (win.option.file_url) txt += `     Arquivo: ${win.option.file_url}\n`;
+        }
+        if (result.tiebreakerRound) {
+          txt += `     [Decidido na ${result.tiebreakerRound.round_number}ª rodada de desempate]\n`;
+        }
       } else {
         txt += `     Sem votos registrados\n`;
       }
@@ -105,7 +103,7 @@ function generateTxtContent(results: WinnerResult[]): string {
   return txt;
 }
 
-function generateHtmlDoc(results: WinnerResult[]): string {
+function generateHtmlDoc(results: ProjectWinnerResult[]): string {
   let html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -147,13 +145,18 @@ function generateHtmlDoc(results: WinnerResult[]): string {
       html += `<div class="item">
     <div class="item-title"><span class="trophy">🏆</span> ${result.item.title}</div>`;
 
-      if (result.winner) {
-        const pct = result.totalVotes > 0 ? Math.round((result.voteCount / result.totalVotes) * 100) : 0;
-        html += `<div class="winner-label">${result.winner.label}</div>`;
-        if (result.winner.description) {
-          html += `<div class="winner-desc">${result.winner.description}</div>`;
+      if (result.winners.length > 0) {
+        for (const win of result.winners) {
+          const pct = result.totalVotes > 0 ? Math.round((win.voteCount / result.totalVotes) * 100) : 0;
+          html += `<div class="winner-label">${win.option.label}</div>`;
+          if (win.option.description) {
+            html += `<div class="winner-desc">${win.option.description}</div>`;
+          }
+          html += `<div class="votes">✓ ${win.voteCount} de ${result.totalVotes} votos (${pct}%)</div>`;
         }
-        html += `<div class="votes">✓ ${result.voteCount} de ${result.totalVotes} votos (${pct}%)</div>`;
+        if (result.tiebreakerRound) {
+          html += `<div class="winner-desc" style="margin-top:8px;font-weight:600;">Decidido na ${result.tiebreakerRound.round_number}ª rodada de desempate</div>`;
+        }
       } else {
         html += `<div class="no-votes">Sem votos registrados</div>`;
       }
@@ -185,7 +188,7 @@ function downloadFile(content: string, filename: string, mimeType: string) {
 export default function VencedoresPage() {
   const { user, loading: authLoading, supabase } = useAuth();
   const [allProjects, setAllProjects] = useState<Project[]>([]);
-  const [winners, setWinners] = useState<WinnerResult[]>([]);
+  const [winners, setWinners] = useState<ProjectWinnerResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
   const [projectFilter, setProjectFilter] = useState<string>("all");
@@ -204,7 +207,7 @@ export default function VencedoresPage() {
         if (cancelled) return;
         setAllProjects(all);
 
-        const results: WinnerResult[] = [];
+        const results: ProjectWinnerResult[] = [];
         for (const project of finalized) {
           const items = await getWinningOptions(supabase, project.id);
           results.push({ project, items });
@@ -549,15 +552,16 @@ export default function VencedoresPage() {
                 <div style={{ padding: 24 }}>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
                     {w.items.map((result, idx) => {
-                      const pct = result.totalVotes > 0 ? Math.round((result.voteCount / result.totalVotes) * 100) : 0;
+                      const topWinner = result.winners[0] || null;
+                      const hasWinner = result.winners.length > 0;
                       return (
                         <div
                           key={result.item.id}
                           style={{
-                            border: result.winner ? "2px solid rgba(0,198,76,0.2)" : "1px solid var(--border)",
+                            border: hasWinner ? "2px solid rgba(0,198,76,0.2)" : "1px solid var(--border)",
                             borderRadius: 16,
                             padding: 20,
-                            background: result.winner
+                            background: hasWinner
                               ? "linear-gradient(135deg, rgba(0,198,76,0.04) 0%, rgba(246,146,30,0.04) 100%)"
                               : "var(--bg-muted)",
                             position: "relative",
@@ -565,7 +569,7 @@ export default function VencedoresPage() {
                           }}
                         >
                           {/* Trophy badge */}
-                          {result.winner && (
+                          {hasWinner && (
                             <div
                               style={{
                                 position: "absolute",
@@ -585,19 +589,38 @@ export default function VencedoresPage() {
                             </div>
                           )}
 
+                          {/* Tiebreaker badge */}
+                          {result.tiebreakerRound && result.tiebreakerRound.status === "resolved" && (
+                            <div
+                              style={{
+                                position: "absolute",
+                                top: 12,
+                                right: hasWinner ? 56 : 12,
+                                padding: "4px 10px",
+                                borderRadius: 8,
+                                background: "rgba(168,85,247,0.1)",
+                                color: "#a855f7",
+                                fontSize: 10,
+                                fontWeight: 700,
+                              }}
+                            >
+                              Desempate {result.tiebreakerRound.round_number}a rodada
+                            </div>
+                          )}
+
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
                             <div
                               style={{
                                 width: 28,
                                 height: 28,
                                 borderRadius: 8,
-                                background: result.winner ? "rgba(0,198,76,0.1)" : "var(--bg-elevated)",
+                                background: hasWinner ? "rgba(0,198,76,0.1)" : "var(--bg-elevated)",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
                                 fontSize: 13,
                                 fontWeight: 800,
-                                color: result.winner ? "var(--success)" : "var(--foreground-subtle)",
+                                color: hasWinner ? "var(--success)" : "var(--foreground-subtle)",
                               }}
                             >
                               {idx + 1}
@@ -607,84 +630,92 @@ export default function VencedoresPage() {
                             </span>
                           </div>
 
-                          {result.winner ? (
+                          {hasWinner ? (
                             <div>
-                              {result.winner.image_url && (
-                                <img
-                                  src={result.winner.image_url}
-                                  alt={result.winner.label}
-                                  style={{
-                                    width: "100%",
-                                    height: 120,
-                                    objectFit: "cover",
-                                    borderRadius: 10,
-                                    marginBottom: 12,
-                                    border: "1px solid var(--border)",
-                                  }}
-                                />
-                              )}
+                              {result.winners.map((win, wIdx) => {
+                                const pct = result.totalVotes > 0 ? Math.round((win.voteCount / result.totalVotes) * 100) : 0;
+                                return (
+                                  <div key={win.option.id} style={{ marginBottom: wIdx < result.winners.length - 1 ? 12 : 0 }}>
+                                    {win.option.image_url && (
+                                      <img
+                                        src={win.option.image_url}
+                                        alt={win.option.label}
+                                        style={{
+                                          width: "100%",
+                                          height: 120,
+                                          objectFit: "cover",
+                                          borderRadius: 10,
+                                          marginBottom: 12,
+                                          border: "1px solid var(--border)",
+                                        }}
+                                      />
+                                    )}
 
-                              <p style={{ fontSize: 16, fontWeight: 800, color: "var(--foreground)", margin: "0 0 4px" }}>
-                                {result.winner.label}
-                              </p>
-                              {result.winner.description && (
-                                <p style={{ fontSize: 12, color: "var(--foreground-muted)", margin: "0 0 12px", lineHeight: 1.5 }}>
-                                  {result.winner.description}
-                                </p>
-                              )}
+                                    <p style={{ fontSize: 16, fontWeight: 800, color: "var(--foreground)", margin: "0 0 4px" }}>
+                                      {result.winners.length > 1 && <span style={{ fontSize: 12, color: "var(--foreground-muted)", marginRight: 6 }}>#{wIdx + 1}</span>}
+                                      {win.option.label}
+                                    </p>
+                                    {win.option.description && (
+                                      <p style={{ fontSize: 12, color: "var(--foreground-muted)", margin: "0 0 12px", lineHeight: 1.5 }}>
+                                        {win.option.description}
+                                      </p>
+                                    )}
 
-                              {result.winner.file_url && (
-                                <a
-                                  href={result.winner.file_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 6,
-                                    padding: "6px 12px",
-                                    borderRadius: 8,
-                                    background: "var(--primary-50)",
-                                    color: "var(--primary)",
-                                    fontSize: 12,
-                                    fontWeight: 600,
-                                    textDecoration: "none",
-                                    marginBottom: 12,
-                                  }}
-                                >
-                                  <FileText size={14} /> Abrir arquivo
-                                </a>
-                              )}
+                                    {win.option.file_url && (
+                                      <a
+                                        href={win.option.file_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        style={{
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: 6,
+                                          padding: "6px 12px",
+                                          borderRadius: 8,
+                                          background: "var(--primary-50)",
+                                          color: "var(--primary)",
+                                          fontSize: 12,
+                                          fontWeight: 600,
+                                          textDecoration: "none",
+                                          marginBottom: 12,
+                                        }}
+                                      >
+                                        <FileText size={14} /> Abrir arquivo
+                                      </a>
+                                    )}
 
-                              {/* Vote bar */}
-                              <div style={{ marginTop: 8 }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                                  <span style={{ fontSize: 11, fontWeight: 600, color: "var(--foreground-muted)" }}>
-                                    Votos recebidos
-                                  </span>
-                                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--success)" }}>
-                                    {result.voteCount}/{result.totalVotes} ({pct}%)
-                                  </span>
-                                </div>
-                                <div
-                                  style={{
-                                    height: 6,
-                                    borderRadius: 3,
-                                    background: "var(--border)",
-                                    overflow: "hidden",
-                                  }}
-                                >
-                                  <div
-                                    style={{
-                                      height: "100%",
-                                      width: `${pct}%`,
-                                      borderRadius: 3,
-                                      background: "linear-gradient(90deg, var(--success), #00e676)",
-                                      transition: "width 0.5s ease",
-                                    }}
-                                  />
-                                </div>
-                              </div>
+                                    {/* Vote bar */}
+                                    <div style={{ marginTop: 8 }}>
+                                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                                        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--foreground-muted)" }}>
+                                          Votos recebidos
+                                        </span>
+                                        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--success)" }}>
+                                          {win.voteCount}/{result.totalVotes} ({pct}%)
+                                        </span>
+                                      </div>
+                                      <div
+                                        style={{
+                                          height: 6,
+                                          borderRadius: 3,
+                                          background: "var(--border)",
+                                          overflow: "hidden",
+                                        }}
+                                      >
+                                        <div
+                                          style={{
+                                            height: "100%",
+                                            width: `${pct}%`,
+                                            borderRadius: 3,
+                                            background: "linear-gradient(90deg, var(--success), #00e676)",
+                                            transition: "width 0.5s ease",
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
                           ) : (
                             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "16px 0" }}>
