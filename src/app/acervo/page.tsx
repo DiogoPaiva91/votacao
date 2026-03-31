@@ -223,7 +223,8 @@ function AcervoPage() {
   const [activeTab, setActiveTab] = useState<AcervoTab>(initialTab);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [dateFilter, setDateFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
 
   // Vencedores filters
@@ -296,13 +297,17 @@ function AcervoPage() {
         const hasType = itemOpts.some((o) => getFileCategory(o.file_type) === typeFilter);
         if (!hasType) return false;
       }
-      if (dateFilter) {
-        const itemMonth = item.created_at.slice(0, 7);
-        if (itemMonth !== dateFilter) return false;
+      if (dateFrom) {
+        const itemDate = item.created_at.slice(0, 10);
+        if (itemDate < dateFrom) return false;
+      }
+      if (dateTo) {
+        const itemDate = item.created_at.slice(0, 10);
+        if (itemDate > dateTo) return false;
       }
       return true;
     });
-  }, [items, options, activeTab, typeFilter, searchQuery, dateFilter]);
+  }, [items, options, activeTab, typeFilter, searchQuery, dateFrom, dateTo]);
 
   // Filtered winners
   const filteredWinners = useMemo(() => {
@@ -470,17 +475,26 @@ function AcervoPage() {
                 />
               </div>
 
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-                <Calendar size={14} style={{ color: "var(--foreground-subtle)" }} />
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
                 <input
-                  type="month"
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
                   className="bg-transparent border-none outline-none text-xs cursor-pointer"
-                  style={{ color: dateFilter ? "var(--foreground)" : "var(--foreground-subtle)" }}
+                  style={{ color: dateFrom ? "var(--foreground)" : "var(--foreground-subtle)", maxWidth: 130 }}
+                  title="Data inicial"
                 />
-                {dateFilter && (
-                  <button onClick={() => setDateFilter("")} className="cursor-pointer" style={{ background: "none", border: "none", padding: 0, color: "var(--foreground-muted)", fontSize: 14, lineHeight: 1 }}>
+                <span style={{ fontSize: 11, color: "var(--foreground-subtle)" }}>até</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="bg-transparent border-none outline-none text-xs cursor-pointer"
+                  style={{ color: dateTo ? "var(--foreground)" : "var(--foreground-subtle)", maxWidth: 130 }}
+                  title="Data final"
+                />
+                {(dateFrom || dateTo) && (
+                  <button onClick={() => { setDateFrom(""); setDateTo(""); }} className="cursor-pointer" style={{ background: "none", border: "none", padding: 0, color: "var(--foreground-muted)", fontSize: 14, lineHeight: 1 }}>
                     ×
                   </button>
                 )}
