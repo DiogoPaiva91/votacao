@@ -502,6 +502,7 @@ export default function ProjectVotingPage() {
               {project.status === "voting" && votes.length > 0 && (
                 <button
                   onClick={handleForceClose}
+                  title="Encerra a votação para todos os membros. Quem ainda não votou será desconsiderado. Use em caso de força maior."
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -526,6 +527,7 @@ export default function ProjectVotingPage() {
               {isOwner && votes.length > 0 && (
                 <button
                   onClick={handleClearVotes}
+                  title="Remove todos os seus votos para poder votar novamente do zero."
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -614,6 +616,7 @@ export default function ProjectVotingPage() {
             </div>
             <button
               onClick={handleFinalizeProject}
+              title="Calcula os vencedores e move o projeto para Finalizado. Todos já votaram."
               style={{
                 padding: "10px 28px",
                 borderRadius: 12,
@@ -1146,6 +1149,7 @@ export default function ProjectVotingPage() {
                     <button
                       disabled={!allItemsVoted || finalizing}
                       onClick={handleFinalize}
+                      title="Confirma seus votos em todos os itens. Após finalizar, você não poderá alterar suas escolhas."
                       style={{
                         display: "flex",
                         alignItems: "center",
@@ -1168,7 +1172,7 @@ export default function ProjectVotingPage() {
                       ) : (
                         <Lock size={18} />
                       )}
-                      Finalizar Votação
+                      Finalizar Meu Voto
                     </button>
                   </div>
                 )}

@@ -3,11 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
-import { getProjects, getProjectMembers, updateProjectStatus, detectTies, finalizeProject, type Project } from "@/lib/supabase";
+import { getProjects, getProjectMembers, getVotingItems, getWinningOptions, updateProjectStatus, detectTies, finalizeProject, type Project, type ProjectMember, type VotingItem, type VotingOption, type WinnerResult } from "@/lib/supabase";
 import { seedOpaProject } from "@/lib/seed-opa";
 import Header from "@/components/Header";
 import LoginScreen from "@/components/LoginScreen";
-import { Plus, Users, GripVertical, ImageIcon, Vote, LayoutDashboard, AlertTriangle } from "lucide-react";
+import { Plus, Users, GripVertical, ImageIcon, Vote, LayoutDashboard, AlertTriangle, X, Trophy, ChevronRight, CheckCircle2, Clock, Eye } from "lucide-react";
 
 type KanbanStatus = Project["status"];
 
@@ -34,6 +34,11 @@ export default function ProjetosPage() {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<KanbanStatus | null>(null);
   const [tiedProjects, setTiedProjects] = useState<Record<string, number>>({});
+  const [modalProject, setModalProject] = useState<Project | null>(null);
+  const [modalItems, setModalItems] = useState<VotingItem[]>([]);
+  const [modalMembers, setModalMembers] = useState<ProjectMember[]>([]);
+  const [modalWinners, setModalWinners] = useState<WinnerResult[]>([]);
+  const [modalLoading, setModalLoading] = useState(false);
 
   // Load projects
   useEffect(() => {
@@ -154,6 +159,27 @@ export default function ProjetosPage() {
     setDraggedId(null);
     setDragOverColumn(null);
   }, []);
+
+  const handleCardClick = useCallback(async (project: Project) => {
+    if (!supabase) return;
+    setModalProject(project);
+    setModalLoading(true);
+    try {
+      const [items, members] = await Promise.all([
+        getVotingItems(supabase, project.id),
+        getProjectMembers(supabase, project.id),
+      ]);
+      setModalItems(items);
+      setModalMembers(members);
+      if (project.status === "finalized" || project.status === "archived") {
+        const winners = await getWinningOptions(supabase, project.id);
+        setModalWinners(winners);
+      } else {
+        setModalWinners([]);
+      }
+    } catch { /* ignore */ }
+    setModalLoading(false);
+  }, [supabase]);
 
   if (loading) {
     return (
@@ -283,6 +309,7 @@ export default function ProjetosPage() {
                       tieCount={tiedProjects[project.id] ?? 0}
                       onDragStart={handleDragStart}
                       onDragEnd={handleDragEnd}
+                      onCardClick={handleCardClick}
                     />
                   ))}
 
@@ -336,6 +363,119 @@ export default function ProjetosPage() {
         </div>
       )}
 
+      {/* Project Preview Modal */}
+      {modalProject && (
+        <div
+          onClick={() => setModalProject(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: "var(--bg-card)", borderRadius: 20, width: "100%", maxWidth: 620, maxHeight: "80vh", overflow: "auto", boxShadow: "0 24px 64px rgba(0,0,0,0.2)", border: "1px solid var(--border)" }}
+          >
+            {/* Modal Header */}
+            <div style={{ padding: "24px 24px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                  <h3 style={{ fontSize: 18, fontWeight: 700, color: "var(--foreground)", margin: 0 }}>{modalProject.name}</h3>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99,
+                    background: modalProject.status === "finalized" ? "rgba(0,198,76,0.1)" : modalProject.status === "voting" ? "rgba(0,144,208,0.1)" : modalProject.status === "archived" ? "rgba(246,146,30,0.1)" : "rgba(107,114,128,0.1)",
+                    color: modalProject.status === "finalized" ? "var(--success)" : modalProject.status === "voting" ? "var(--fips-blue)" : modalProject.status === "archived" ? "var(--primary)" : "#6b7280",
+                  }}>
+                    {modalProject.status === "draft" ? "Rascunho" : modalProject.status === "voting" ? "Em Votação" : modalProject.status === "finalized" ? "Finalizado" : "Desempate"}
+                  </span>
+                </div>
+                {modalProject.description && <p style={{ fontSize: 13, color: "var(--foreground-muted)", lineHeight: 1.5, margin: 0 }}>{modalProject.description}</p>}
+              </div>
+              <button onClick={() => setModalProject(null)} style={{ background: "var(--bg-muted)", border: "none", borderRadius: 10, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                <X size={16} color="var(--foreground-muted)" />
+              </button>
+            </div>
+
+            {modalLoading ? (
+              <div style={{ padding: 48, textAlign: "center", color: "var(--foreground-muted)", fontSize: 13 }}>Carregando...</div>
+            ) : (
+              <>
+                {/* Members Section */}
+                <div style={{ padding: "16px 24px", borderBottom: "1px solid var(--border)" }}>
+                  <h4 style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground-muted)", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    Membros ({modalMembers.length})
+                  </h4>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {modalMembers.map((m) => (
+                      <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px 4px 4px", borderRadius: 99, background: "var(--bg-muted)", border: "1px solid var(--border)" }}>
+                        {m.user_avatar ? (
+                          <img src={m.user_avatar} alt={m.user_name} style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover" }} />
+                        ) : (
+                          <div style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--fips-blue)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff" }}>
+                            {(m.user_name || "?").charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--foreground)" }}>{m.user_name}</span>
+                        {m.has_finalized ? (
+                          <CheckCircle2 size={14} color="var(--success)" />
+                        ) : (
+                          <Clock size={14} color="var(--foreground-subtle)" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Items Section */}
+                <div style={{ padding: "16px 24px" }}>
+                  <h4 style={{ fontSize: 12, fontWeight: 700, color: "var(--foreground-muted)", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    Itens de Votação ({modalItems.length})
+                  </h4>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {modalItems.map((item, idx) => {
+                      const winnerResult = modalWinners.find(w => w.item.id === item.id);
+                      const hasWinner = winnerResult && winnerResult.winners.length > 0;
+                      return (
+                        <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, background: "var(--bg-muted)", border: hasWinner ? "1px solid rgba(0,198,76,0.2)" : "1px solid var(--border)" }}>
+                          <div style={{ width: 24, height: 24, borderRadius: 6, background: hasWinner ? "rgba(0,198,76,0.1)" : "var(--bg-elevated)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: hasWinner ? "var(--success)" : "var(--foreground-subtle)", flexShrink: 0 }}>
+                            {idx + 1}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: 13, fontWeight: 600, color: "var(--foreground)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {item.title}
+                            </p>
+                            {hasWinner && (
+                              <p style={{ fontSize: 11, color: "var(--success)", margin: "2px 0 0", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                                <Trophy size={10} /> {winnerResult!.winners[0].option.label}
+                              </p>
+                            )}
+                          </div>
+                          {hasWinner && <CheckCircle2 size={16} color="var(--success)" style={{ flexShrink: 0 }} />}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div style={{ padding: "16px 24px 20px", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end" }}>
+                  <Link
+                    href={`/projeto/${modalProject.id}`}
+                    onClick={() => setModalProject(null)}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 8,
+                      padding: "10px 20px", borderRadius: 12,
+                      background: "var(--fips-blue)", color: "#fff",
+                      fontSize: 13, fontWeight: 600, textDecoration: "none",
+                      boxShadow: "0 4px 12px rgba(0,144,208,0.3)",
+                    }}
+                  >
+                    <Eye size={16} /> Ver Projeto Completo <ChevronRight size={14} />
+                  </Link>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <style jsx global>{`
         @media (max-width: 1024px) { .kanban-grid { grid-template-columns: repeat(2, 1fr) !important; } }
         @media (max-width: 640px) { .kanban-grid { grid-template-columns: 1fr !important; } }
@@ -354,17 +494,21 @@ interface ProjectCardProps {
   tieCount: number;
   onDragStart: (e: React.DragEvent, id: string) => void;
   onDragEnd: () => void;
+  onCardClick: (project: Project) => void;
 }
 
-function ProjectCard({ project, memberCount, voteProgress, isDragging, tieCount, onDragStart, onDragEnd }: ProjectCardProps) {
+function ProjectCard({ project, memberCount, voteProgress, isDragging, tieCount, onDragStart, onDragEnd, onCardClick }: ProjectCardProps) {
   const [hovered, setHovered] = useState(false);
   const progressPercent = voteProgress.total > 0 ? Math.round((voteProgress.voted / voteProgress.total) * 100) : 0;
+
+  const [didDrag, setDidDrag] = useState(false);
 
   return (
     <div
       draggable
-      onDragStart={(e) => onDragStart(e, project.id)}
-      onDragEnd={onDragEnd}
+      onDragStart={(e) => { setDidDrag(true); onDragStart(e, project.id); }}
+      onDragEnd={() => { onDragEnd(); setTimeout(() => setDidDrag(false), 100); }}
+      onClick={() => { if (!didDrag) onCardClick(project); }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -391,9 +535,9 @@ function ProjectCard({ project, memberCount, voteProgress, isDragging, tieCount,
       <div style={{ padding: "14px 16px 16px" }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 6 }}>
           <GripVertical size={16} style={{ color: "var(--foreground-muted)", opacity: 0.4, flexShrink: 0, marginTop: 2 }} />
-          <Link href={`/projeto/${project.id}`} style={{ fontSize: 15, fontWeight: 700, color: "var(--foreground)", textDecoration: "none", lineHeight: 1.3, flex: 1 }} onClick={(e) => e.stopPropagation()}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: "var(--foreground)", lineHeight: 1.3, flex: 1 }}>
             {project.name}
-          </Link>
+          </span>
         </div>
 
         {project.description && (

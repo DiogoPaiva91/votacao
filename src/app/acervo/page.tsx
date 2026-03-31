@@ -111,6 +111,26 @@ function isInPeriod(dateStr: string, filter: TimeFilter): boolean {
   return true;
 }
 
+function downloadSingleItem(result: WinnerResult, projectName: string) {
+  if (result.winners.length === 0) return;
+  const win = result.winners[0];
+  // If the winner has a file, open it directly
+  if (win.option.file_url) {
+    window.open(win.option.file_url, "_blank");
+    return;
+  }
+  // Otherwise generate a text file with the item content
+  const pct = result.totalVotes > 0 ? Math.round((win.voteCount / result.totalVotes) * 100) : 0;
+  let txt = `${result.item.title}\n`;
+  txt += `Projeto: ${projectName}\n`;
+  txt += `${"─".repeat(40)}\n\n`;
+  txt += `Vencedor: ${win.option.label}\n`;
+  if (win.option.description) txt += `\n${win.option.description}\n`;
+  txt += `\nVotos: ${win.voteCount} de ${result.totalVotes} (${pct}%)\n`;
+  const slug = result.item.title.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 40);
+  downloadFile(txt, `${slug}.txt`, "text/plain;charset=utf-8");
+}
+
 function generateTxtContent(results: ProjectWinnerResult[]): string {
   let txt = "═══════════════════════════════════════════\n";
   txt += "        RELATÓRIO DE VENCEDORES\n";
@@ -834,8 +854,17 @@ function AcervoPage() {
                           return (
                             <div key={result.item.id} style={{ border: hasWinner ? "2px solid rgba(0,198,76,0.2)" : "1px solid var(--border)", borderRadius: 16, padding: 20, position: "relative", overflow: "hidden", background: hasWinner ? "linear-gradient(135deg, rgba(0,198,76,0.04) 0%, rgba(246,146,30,0.04) 100%)" : "var(--bg-muted)" }}>
                               {hasWinner && (
-                                <div style={{ position: "absolute", top: 12, right: 12, width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #fdc24e 0%, #f6921e 100%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(246,146,30,0.3)" }}>
-                                  <Trophy size={18} color="#fff" />
+                                <div style={{ position: "absolute", top: 12, right: 12, display: "flex", gap: 8, alignItems: "center" }}>
+                                  <button
+                                    onClick={() => downloadSingleItem(result, w.project.name)}
+                                    title="Baixar conteúdo deste item"
+                                    style={{ width: 30, height: 30, borderRadius: "50%", background: "rgba(0,144,208,0.1)", border: "1px solid rgba(0,144,208,0.2)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.15s" }}
+                                  >
+                                    <Download size={14} color="var(--fips-blue)" />
+                                  </button>
+                                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #fdc24e 0%, #f6921e 100%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(246,146,30,0.3)" }}>
+                                    <Trophy size={18} color="#fff" />
+                                  </div>
                                 </div>
                               )}
                               {result.tiebreakerRound && result.tiebreakerRound.status === "resolved" && (
