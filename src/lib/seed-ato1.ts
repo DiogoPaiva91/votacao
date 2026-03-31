@@ -41,7 +41,7 @@ async function _doSeed(
     .insert({
       name: 'ATO 1 - O Caos',
       description:
-        'Votação dos 44 módulos do ATO 1 - O Caos. Para cada módulo, escolha o exemplo mais representativo do caos que existia antes do FIPS.',
+        'Votação dos 44 módulos do ATO 1 - O Caos. Para cada módulo, escolha o exemplo mais representativo do caos que existia antes da transformação.',
       status: 'voting',
       created_by_email: userEmail,
       created_by_name: userName,

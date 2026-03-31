@@ -44,11 +44,11 @@ import {
 
 // ─── Status Badge ───────────────────────────────────────────
 function StatusBadge({ status }: { status: Project["status"] }) {
-  const map: Record<string, { label: string; bg: string; color: string }> = {
-    draft: { label: "Novo Projeto", bg: "rgba(100,116,139,0.12)", color: "#64748b" },
-    voting: { label: "Em Votação", bg: "rgba(246,146,30,0.12)", color: "#f6921e" },
-    finalized: { label: "Finalizado", bg: "rgba(0,198,76,0.12)", color: "#00c64c" },
-    archived: { label: "Arquivado", bg: "rgba(100,116,139,0.12)", color: "#64748b" },
+  const map: Record<string, { label: string; bg: string; color: string; border: string }> = {
+    draft: { label: "Rascunho", bg: "rgba(255,255,255,0.15)", color: "#fff", border: "rgba(255,255,255,0.3)" },
+    voting: { label: "Em Votação", bg: "rgba(246,146,30,0.25)", color: "#fbbf24", border: "rgba(246,146,30,0.5)" },
+    finalized: { label: "Finalizado", bg: "rgba(0,198,76,0.25)", color: "#4ade80", border: "rgba(0,198,76,0.5)" },
+    archived: { label: "Arquivado", bg: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)", border: "rgba(255,255,255,0.2)" },
   };
   const s = map[status] ?? map.draft;
   return (
@@ -57,15 +57,17 @@ function StatusBadge({ status }: { status: Project["status"] }) {
         display: "inline-flex",
         alignItems: "center",
         gap: 6,
-        padding: "4px 14px",
+        padding: "5px 16px",
         borderRadius: 9999,
         fontSize: 12,
         fontWeight: 700,
         background: s.bg,
         color: s.color,
+        border: `1px solid ${s.border}`,
+        backdropFilter: "blur(8px)",
       }}
     >
-      <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }} />
+      <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color, boxShadow: `0 0 6px ${s.color}` }} />
       {s.label}
     </span>
   );
@@ -421,7 +423,7 @@ export default function ProjectVotingPage() {
       <div
         style={{
           background: "var(--gradient-hero)",
-          padding: "40px 0 48px",
+          padding: "40px 0 56px",
           position: "relative",
           overflow: "hidden",
         }}
@@ -429,7 +431,7 @@ export default function ProjectVotingPage() {
         <div style={{ position: "absolute", top: -60, right: -60, width: 200, height: 200, borderRadius: "50%", background: "rgba(255,255,255,0.04)" }} />
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px" }}>
           <Link
-            href="/"
+            href="/projetos"
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -521,7 +523,7 @@ export default function ProjectVotingPage() {
       </div>
 
       {/* ── Content ── */}
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px", marginTop: -24 }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px", marginTop: -20 }}>
         {/* All-finalized banner */}
         {allFinalized && project.status !== "finalized" && (
           <div
