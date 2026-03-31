@@ -393,3 +393,155 @@ export async function getFinalizedProjects(sb: SupabaseClient) {
   if (error) throw error;
   return data as Project[];
 }
+
+// ==================== ACERVO ====================
+
+export interface AcervoItem {
+  id: string;
+  title: string;
+  description: string | null;
+  mode: 'registro' | 'votacao';
+  status: 'active' | 'voting' | 'resolved';
+  winner_option_id: string | null;
+  uploaded_by_email: string;
+  uploaded_by_name: string;
+  uploaded_by_avatar: string | null;
+  created_at: string;
+}
+
+export interface AcervoOption {
+  id: string;
+  item_id: string;
+  label: string;
+  file_url: string | null;
+  file_type: string | null;
+  content_text: string | null;
+  position: number;
+  created_at: string;
+}
+
+export interface AcervoLike {
+  id: string;
+  item_id: string;
+  user_email: string;
+  user_name: string;
+  created_at: string;
+}
+
+export interface AcervoVote {
+  id: string;
+  item_id: string;
+  option_id: string;
+  voter_email: string;
+  voter_name: string;
+  voter_avatar: string | null;
+  created_at: string;
+}
+
+export async function getAcervoItems(sb: SupabaseClient) {
+  const { data, error } = await sb.from('acervo_items').select('*').order('created_at', { ascending: false });
+  if (error) throw error;
+  return data as AcervoItem[];
+}
+
+export async function getAcervoOptions(sb: SupabaseClient, itemIds: string[]) {
+  if (itemIds.length === 0) return [] as AcervoOption[];
+  const { data, error } = await sb.from('acervo_options').select('*').in('item_id', itemIds).order('position');
+  if (error) throw error;
+  return data as AcervoOption[];
+}
+
+export async function getAcervoLikes(sb: SupabaseClient, itemIds: string[]) {
+  if (itemIds.length === 0) return [] as AcervoLike[];
+  const { data, error } = await sb.from('acervo_likes').select('*').in('item_id', itemIds);
+  if (error) throw error;
+  return data as AcervoLike[];
+}
+
+export async function getAcervoVotes(sb: SupabaseClient, itemIds: string[]) {
+  if (itemIds.length === 0) return [] as AcervoVote[];
+  const { data, error } = await sb.from('acervo_votes').select('*').in('item_id', itemIds);
+  if (error) throw error;
+  return data as AcervoVote[];
+}
+
+export async function createAcervoItem(sb: SupabaseClient, item: Partial<AcervoItem>) {
+  const { data, error } = await sb.from('acervo_items').insert(item).select().single();
+  if (error) throw error;
+  return data as AcervoItem;
+}
+
+export async function createAcervoOptions(sb: SupabaseClient, options: Partial<AcervoOption>[]) {
+  const { data, error } = await sb.from('acervo_options').insert(options).select();
+  if (error) throw error;
+  return data as AcervoOption[];
+}
+
+export async function toggleAcervoLike(sb: SupabaseClient, itemId: string, email: string, name: string): Promise<boolean> {
+  const { data: existing } = await sb.from('acervo_likes').select('id').eq('item_id', itemId).eq('user_email', email).maybeSingle();
+  if (existing) {
+    await sb.from('acervo_likes').delete().eq('id', existing.id);
+    return false;
+  }
+  await sb.from('acervo_likes').insert({ item_id: itemId, user_email: email, user_name: name });
+  return true;
+}
+
+export async function submitAcervoVote(
+  sb: SupabaseClient,
+  itemId: string,
+  optionId: string,
+  email: string,
+  name: string,
+  avatar: string | null,
+) {
+  const { data, error } = await sb.from('acervo_votes')
+    .upsert({ item_id: itemId, option_id: optionId, voter_email: email, voter_name: name, voter_avatar: avatar }, { onConflict: 'item_id,voter_email' })
+    .select().single();
+  if (error) throw error;
+  return data as AcervoVote;
+}
+
+export async function resolveAcervoItem(sb: SupabaseClient, itemId: string, winnerOptionId: string) {
+  const { error } = await sb.from('acervo_items').update({ status: 'resolved', winner_option_id: winnerOptionId }).eq('id', itemId);
+  if (error) throw error;
+}
+
+export async function deleteAcervoItem(sb: SupabaseClient, itemId: string) {
+  const { error } = await sb.from('acervo_items').delete().eq('id', itemId);
+  if (error) throw error;
+}
+
+// Single-item queries (for detail page)
+export async function getAcervoItem(sb: SupabaseClient, id: string) {
+  const { data, error } = await sb.from('acervo_items').select('*').eq('id', id).single();
+  if (error) throw error;
+  return data as AcervoItem;
+}
+
+export async function getAcervoOptionsByItem(sb: SupabaseClient, itemId: string) {
+  const { data, error } = await sb.from('acervo_options').select('*').eq('item_id', itemId).order('position');
+  if (error) throw error;
+  return data as AcervoOption[];
+}
+
+export async function getAcervoLikesByItem(sb: SupabaseClient, itemId: string) {
+  const { data, error } = await sb.from('acervo_likes').select('*').eq('item_id', itemId);
+  if (error) throw error;
+  return data as AcervoLike[];
+}
+
+export async function getAcervoVotesByItem(sb: SupabaseClient, itemId: string) {
+  const { data, error } = await sb.from('acervo_votes').select('*').eq('item_id', itemId);
+  if (error) throw error;
+  return data as AcervoVote[];
+}
+
+export async function uploadAcervoFile(sb: SupabaseClient, file: File): Promise<string> {
+  const ext = file.name.split('.').pop()?.toLowerCase() || 'bin';
+  const safeName = `acervo/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { error } = await sb.storage.from('project-files').upload(safeName, file, { cacheControl: '3600', upsert: false });
+  if (error) throw error;
+  const { data } = sb.storage.from('project-files').getPublicUrl(safeName);
+  return data.publicUrl;
+}

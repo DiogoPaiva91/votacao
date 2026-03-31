@@ -1,8 +1,8 @@
 "use client";
 
 import { useAuth } from "@/lib/auth";
-import { Vote } from "lucide-react";
 import { useState } from "react";
+import Logo3D from "./Logo3D";
 
 export default function LoginScreen() {
   const { signInWithGoogle, loading } = useAuth();
@@ -66,74 +66,9 @@ export default function LoginScreen() {
             position: "relative",
             marginBottom: -36,
             zIndex: 20,
-            perspective: "600px",
           }}
         >
-          <div
-            style={{
-              width: 80,
-              height: 80,
-              borderRadius: 20,
-              background: "linear-gradient(145deg, #f6921e 0%, #e07310 60%, #c46010 100%)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transform: "rotateX(8deg) rotateY(-5deg)",
-              transformStyle: "preserve-3d",
-              boxShadow:
-                "0 20px 40px -10px rgba(246, 146, 30, 0.5), " +
-                "0 8px 16px -4px rgba(0, 0, 0, 0.3), " +
-                "inset 0 2px 0 rgba(255, 255, 255, 0.3), " +
-                "inset 0 -2px 4px rgba(0, 0, 0, 0.15), " +
-                "inset 2px 0 0 rgba(255, 255, 255, 0.15), " +
-                "inset -2px 0 0 rgba(0, 0, 0, 0.05)",
-              border: "1px solid rgba(255, 200, 100, 0.25)",
-            }}
-          >
-            {/* Inner highlight for 3D depth */}
-            <div
-              style={{
-                position: "absolute",
-                top: 3,
-                left: 3,
-                right: 6,
-                bottom: "50%",
-                borderRadius: "17px 17px 50% 50%",
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.25) 0%, transparent 100%)",
-                pointerEvents: "none",
-              }}
-            />
-            <Vote size={38} color="#fff" style={{ filter: "drop-shadow(0 2px 3px rgba(0,0,0,0.2))", position: "relative", zIndex: 1 }} />
-          </div>
-          {/* 3D bottom edge / depth */}
-          <div
-            style={{
-              position: "absolute",
-              bottom: -4,
-              left: 4,
-              right: 4,
-              height: 8,
-              borderRadius: "0 0 16px 16px",
-              background: "linear-gradient(180deg, #b85a0a 0%, #9a4a08 100%)",
-              zIndex: -1,
-              filter: "blur(0.5px)",
-            }}
-          />
-          {/* Shadow on the ground */}
-          <div
-            style={{
-              position: "absolute",
-              bottom: -12,
-              left: "50%",
-              transform: "translateX(-50%)",
-              width: 60,
-              height: 10,
-              borderRadius: "50%",
-              background: "rgba(0,0,0,0.25)",
-              filter: "blur(6px)",
-            }}
-          />
+          <Logo3D size={80} />
         </div>
 
         {/* Glass Card Body */}
@@ -164,17 +99,7 @@ export default function LoginScreen() {
                 textShadow: "0 2px 8px rgba(0,0,0,0.15)",
               }}
             >
-              Votação{" "}
-              <span
-                style={{
-                  background: "linear-gradient(135deg, #f6921e, #fdc24e)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.1))",
-                }}
-              >
-                FIPS
-              </span>
+              Votação
             </h1>
             <p
               style={{

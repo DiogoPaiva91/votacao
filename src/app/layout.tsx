@@ -3,8 +3,8 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 
 export const metadata: Metadata = {
-  title: "ATO 1 - O Caos | Apresentacao 3 Atos - FIPS",
-  description: "Visualize o caos do passado antes da transformação digital FIPS. 44 módulos, 132 cenários para aprovação dos gestores.",
+  title: "Votação | Centro de Aprovação de Projetos",
+  description: "Plataforma de votação e aprovação de projetos. Crie projetos, adicione itens para aprovação e acompanhe as decisões dos gestores em tempo real.",
 };
 
 export default function RootLayout({
