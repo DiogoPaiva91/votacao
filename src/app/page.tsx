@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
-import { getProjects, getProjectMembers, type Project } from "@/lib/supabase";
+import { getProjects, type Project } from "@/lib/supabase";
 import { seedAto1Project } from "@/lib/seed-ato1";
 import Header from "@/components/Header";
 import LoginScreen from "@/components/LoginScreen";
@@ -31,17 +31,9 @@ export default function Home() {
         if (cancelled) return;
         setProjects(data);
 
-        // Count pending votes
-        const votingProjects = data.filter((p) => p.status === "voting");
-        let pending = 0;
-        for (const p of votingProjects) {
-          try {
-            const members = await getProjectMembers(supabase, p.id);
-            const me = members.find((m) => m.user_email === userEmail);
-            if (me && !me.has_finalized) pending++;
-          } catch { /* ignore */ }
-        }
-        if (!cancelled) setPendingVotes(pending);
+        // Count pending: draft projects (awaiting voting)
+        const draftCount = data.filter((p) => p.status === "draft").length;
+        if (!cancelled) setPendingVotes(draftCount);
       } catch { /* ignore */ }
       finally { if (!cancelled) setLoadingData(false); }
     })();
