@@ -230,6 +230,8 @@ function AcervoPage() {
   // Vencedores filters
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
   const [projectFilter, setProjectFilter] = useState<string>("all");
+  const [winDateFrom, setWinDateFrom] = useState("");
+  const [winDateTo, setWinDateTo] = useState("");
 
   const userEmail = user?.email || "";
   const userName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "";
@@ -314,9 +316,17 @@ function AcervoPage() {
     return winners.filter((w) => {
       if (!isInPeriod(w.project.updated_at, timeFilter)) return false;
       if (projectFilter !== "all" && w.project.id !== projectFilter) return false;
+      if (winDateFrom) {
+        const d = w.project.updated_at.slice(0, 10);
+        if (d < winDateFrom) return false;
+      }
+      if (winDateTo) {
+        const d = w.project.updated_at.slice(0, 10);
+        if (d > winDateTo) return false;
+      }
       return true;
     });
-  }, [winners, timeFilter, projectFilter]);
+  }, [winners, timeFilter, projectFilter, winDateFrom, winDateTo]);
 
   // Handlers
   const handleLike = async (itemId: string) => {
@@ -476,12 +486,13 @@ function AcervoPage() {
               </div>
 
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+                <Calendar size={14} style={{ color: "var(--foreground-subtle)", flexShrink: 0 }} />
                 <input
                   type="date"
                   value={dateFrom}
                   onChange={(e) => setDateFrom(e.target.value)}
                   className="bg-transparent border-none outline-none text-xs cursor-pointer"
-                  style={{ color: dateFrom ? "var(--foreground)" : "var(--foreground-subtle)", maxWidth: 130 }}
+                  style={{ color: dateFrom ? "var(--foreground)" : "var(--foreground-subtle)", maxWidth: 120 }}
                   title="Data inicial"
                 />
                 <span style={{ fontSize: 11, color: "var(--foreground-subtle)" }}>até</span>
@@ -490,7 +501,7 @@ function AcervoPage() {
                   value={dateTo}
                   onChange={(e) => setDateTo(e.target.value)}
                   className="bg-transparent border-none outline-none text-xs cursor-pointer"
-                  style={{ color: dateTo ? "var(--foreground)" : "var(--foreground-subtle)", maxWidth: 130 }}
+                  style={{ color: dateTo ? "var(--foreground)" : "var(--foreground-subtle)", maxWidth: 120 }}
                   title="Data final"
                 />
                 {(dateFrom || dateTo) && (
@@ -758,6 +769,15 @@ function AcervoPage() {
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </select>
+                </div>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl" style={{ background: "var(--bg-card)", border: "1px solid var(--border)", marginLeft: 8 }}>
+                  <Calendar size={14} style={{ color: "var(--foreground-subtle)", flexShrink: 0 }} />
+                  <input type="date" value={winDateFrom} onChange={(e) => setWinDateFrom(e.target.value)} title="Data inicial" style={{ border: "none", background: "transparent", color: "var(--foreground)", fontSize: 12, fontFamily: "inherit", outline: "none", cursor: "pointer", width: 120 }} />
+                  <span style={{ fontSize: 11, color: "var(--foreground-subtle)" }}>até</span>
+                  <input type="date" value={winDateTo} onChange={(e) => setWinDateTo(e.target.value)} title="Data final" style={{ border: "none", background: "transparent", color: "var(--foreground)", fontSize: 12, fontFamily: "inherit", outline: "none", cursor: "pointer", width: 120 }} />
+                  {(winDateFrom || winDateTo) && (
+                    <button onClick={() => { setWinDateFrom(""); setWinDateTo(""); }} style={{ background: "none", border: "none", color: "var(--foreground-subtle)", cursor: "pointer", fontSize: 14, padding: "0 2px", fontFamily: "inherit", lineHeight: 1 }} title="Limpar datas">×</button>
+                  )}
                 </div>
               </div>
               {filteredWinners.length > 0 && (
