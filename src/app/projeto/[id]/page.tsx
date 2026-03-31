@@ -423,9 +423,8 @@ export default function ProjectVotingPage() {
       <div
         style={{
           background: "var(--gradient-hero)",
-          padding: "40px 0 68px",
+          padding: "40px 0 32px",
           position: "relative",
-          overflow: "hidden",
         }}
       >
         <div style={{ position: "absolute", top: -60, right: -60, width: 200, height: 200, borderRadius: "50%", background: "rgba(255,255,255,0.04)" }} />
@@ -523,7 +522,7 @@ export default function ProjectVotingPage() {
       </div>
 
       {/* ── Content ── */}
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px", marginTop: -20 }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 24px 0" }}>
         {/* All-finalized banner */}
         {allFinalized && project.status !== "finalized" && (
           <div
