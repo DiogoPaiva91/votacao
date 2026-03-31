@@ -64,8 +64,8 @@ export default function Home() {
   const recentProjects = [...projects].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 4);
 
   const statCards = [
-    { label: "Projetos Ativos", value: votingCount, icon: Vote, color: "var(--fips-blue)", bg: "rgba(0,144,208,0.08)", href: "/projetos" },
-    { label: "Votos Pendentes", value: pendingVotes, icon: LayoutDashboard, color: "var(--primary)", bg: "rgba(246,146,30,0.08)", href: "/projetos" },
+    { label: "Votos Pendentes", value: pendingVotes, icon: Vote, color: "var(--primary)", bg: "rgba(246,146,30,0.08)", href: "/projetos" },
+    { label: "Em Votação", value: votingCount, icon: LayoutDashboard, color: "var(--fips-blue)", bg: "rgba(0,144,208,0.08)", href: "/projetos" },
     { label: "Finalizados", value: finalizedCount, icon: Trophy, color: "var(--success)", bg: "rgba(0,198,76,0.08)", href: "/acervo" },
   ];
 
