@@ -423,7 +423,7 @@ export default function ProjectVotingPage() {
       <div
         style={{
           background: "var(--gradient-hero)",
-          padding: "40px 0 56px",
+          padding: "40px 0 68px",
           position: "relative",
           overflow: "hidden",
         }}
