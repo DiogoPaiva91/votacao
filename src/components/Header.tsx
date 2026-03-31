@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import Logo3D from "./Logo3D";
-import { getProjects, getProjectMembers } from "@/lib/supabase";
+import { getProjects } from "@/lib/supabase";
 
 export default function Header() {
   const { user, signOut, supabase } = useAuth();
@@ -22,7 +22,7 @@ export default function Header() {
     .substring(0, 2)
     .toUpperCase();
 
-  // Load pending votes count
+  // Load count of draft projects (new projects awaiting voting)
   useEffect(() => {
     if (!supabase || !user?.email) return;
     let cancelled = false;
@@ -30,16 +30,8 @@ export default function Header() {
     (async () => {
       try {
         const projects = await getProjects(supabase);
-        const votingProjects = projects.filter((p) => p.status === "voting");
-        let count = 0;
-
-        for (const p of votingProjects) {
-          const members = await getProjectMembers(supabase, p.id);
-          const me = members.find((m) => m.user_email === user.email);
-          if (me && !me.has_finalized) count++;
-        }
-
-        if (!cancelled) setPendingCount(count);
+        const draftCount = projects.filter((p) => p.status === "draft").length;
+        if (!cancelled) setPendingCount(draftCount);
       } catch { /* ignore */ }
     })();
 
@@ -122,7 +114,7 @@ export default function Header() {
               color: pendingCount > 0 ? "var(--primary)" : "var(--foreground-subtle)",
               textDecoration: "none",
             }}
-            title={pendingCount > 0 ? `${pendingCount} voto(s) pendente(s)` : "Sem votos pendentes"}
+            title={pendingCount > 0 ? `${pendingCount} projeto(s) aguardando votação` : "Nenhum projeto pendente"}
           >
             <Bell size={18} />
             {pendingCount > 0 && (
