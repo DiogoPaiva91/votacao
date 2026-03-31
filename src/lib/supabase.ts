@@ -369,6 +369,22 @@ export async function getVotersByOption(sb: SupabaseClient, projectId: string) {
   return map;
 }
 
+export async function clearProjectVotes(sb: SupabaseClient, projectId: string) {
+  // 1. Delete tiebreaker rounds
+  await sb.from('tiebreaker_rounds').delete().eq('project_id', projectId);
+  // 2. Delete all votes
+  await sb.from('votes').delete().eq('project_id', projectId);
+  // 3. Reset member finalization
+  const { error } = await sb.from('project_members')
+    .update({ has_finalized: false, finalized_at: null })
+    .eq('project_id', projectId);
+  if (error) throw error;
+  // 4. Set project back to voting
+  await sb.from('projects')
+    .update({ status: 'voting', updated_at: new Date().toISOString() })
+    .eq('id', projectId);
+}
+
 export async function getFinalizedProjects(sb: SupabaseClient) {
   const { data, error } = await sb.from('projects')
     .select('*')

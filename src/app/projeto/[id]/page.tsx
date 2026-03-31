@@ -16,6 +16,7 @@ import {
   finalizeMemberVote,
   updateProjectStatus,
   addProjectMember,
+  clearProjectVotes,
   type Project,
   type ProjectMember,
   type VotingItem,
@@ -38,6 +39,7 @@ import {
   Loader2,
   AlertTriangle,
   Swords,
+  Trash2,
 } from "lucide-react";
 
 // ─── Status Badge ───────────────────────────────────────────
@@ -257,6 +259,7 @@ export default function ProjectVotingPage() {
     [members, voterEmail],
   );
   const hasFinalized = currentMember?.has_finalized ?? false;
+  const isOwner = currentMember?.role === "owner";
   const allFinalized = useMemo(
     () => members.length > 0 && members.every((m) => m.has_finalized),
     [members],
@@ -374,6 +377,25 @@ export default function ProjectVotingPage() {
     }
   }, [supabase, projectId]);
 
+  const handleClearVotes = useCallback(async () => {
+    if (!supabase) return;
+    if (!confirm("Tem certeza que deseja limpar TODOS os votos deste projeto? Esta ação não pode ser desfeita.")) return;
+    try {
+      await clearProjectVotes(supabase, projectId);
+      // Reload all data
+      const [p, m, v] = await Promise.all([
+        getProject(supabase, projectId),
+        getProjectMembers(supabase, projectId),
+        getProjectVotes(supabase, projectId),
+      ]);
+      setProject(p);
+      setMembers(m);
+      setVotes(v);
+    } catch (err) {
+      console.error("Clear votes failed:", err);
+    }
+  }, [supabase, projectId]);
+
   // ── Auth guard ──
   if (authLoading) {
     return (
@@ -435,6 +457,32 @@ export default function ProjectVotingPage() {
               )}
             </div>
 
+            {/* Actions */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {/* Clear votes button - only for owner */}
+              {isOwner && votes.length > 0 && (
+                <button
+                  onClick={handleClearVotes}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "8px 16px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(239,68,68,0.3)",
+                    background: "rgba(239,68,68,0.1)",
+                    color: "#ef4444",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  <Trash2 size={14} /> Limpar Votação
+                </button>
+              )}
+
             {/* Member avatars */}
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               {members.slice(0, 8).map((m, i) => (
@@ -466,6 +514,7 @@ export default function ProjectVotingPage() {
                   +{members.length - 8}
                 </span>
               )}
+            </div>
             </div>
           </div>
         </div>

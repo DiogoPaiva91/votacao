@@ -1,7 +1,26 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { modulosCaos } from '@/data/modulosCaos';
 
+let seedInProgress = false;
+
 export async function seedAto1Project(
+  sb: SupabaseClient,
+  userEmail: string,
+  userName: string,
+  userAvatar: string | null,
+): Promise<boolean> {
+  // Prevent race condition (React Strict Mode calls useEffect twice)
+  if (seedInProgress) return false;
+  seedInProgress = true;
+
+  try {
+    return await _doSeed(sb, userEmail, userName, userAvatar);
+  } finally {
+    seedInProgress = false;
+  }
+}
+
+async function _doSeed(
   sb: SupabaseClient,
   userEmail: string,
   userName: string,
